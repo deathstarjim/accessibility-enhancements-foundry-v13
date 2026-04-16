@@ -1,3 +1,5 @@
+> **Based on the original [Accessibility Enhancements](https://github.com/silvative/accessibility-enhancements) module by [Cora (silvative)](https://github.com/silvative). This fork adapts the module for D&D 5e (dnd5e2) on Foundry VTT v13.**
+
 This module provides several minor modifications to the Foundry interface in order to improve accessibility.
 
 It's far from perfect - there are a lot of places with obvious paths for improvement that I have not taken due to a lack of time or skill. About the best I can say is that I did better than I had expected - this module's goal is more about getting the player experience closer to serviceable by patching obvious holes while we wait for core improvements. My hope is that others will see the terrible job I've done and be inspired to outdo me. To that end, I've listed some of the known issues and limitations in this readme file- perhaps they can serve as inspiration to someone.
