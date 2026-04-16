@@ -1,9 +1,11 @@
-/* A bunch of disgusting CSS overrides that hit the system's CSS like a hammer to remove as much colour as possible */
+/* High contrast overrides for D&D 5e (dnd5e2) character sheets.
+   Tidy 5e Sheets support will be added in a future update. */
+
+/* ── Colour palette variables ─────────────────────────────────── */
 
 .dark {
     --text: white;
     --back: black;
-    --color-pf-primary: white;
     --background: rgb(40, 40, 40);
     --background-2: rgb(80, 80, 80);
     --glow: rgb(128, 255, 255);
@@ -14,256 +16,216 @@
 .light {
     --text: black;
     --back: white;
-    --color-pf-primary: black;
     --background: rgb(220, 220, 220);
     --background-2: rgb(200, 200, 200);
     --glow: rgb(255, 210, 128);
-    --highlight: 0 0 0 1px var(--text), 0 0 0 2px  var(--background-2), inset 0 0 4px rgba(0, 0, 0, 0.25);
+    --highlight: 0 0 0 1px var(--text), 0 0 0 2px var(--background-2), inset 0 0 4px rgba(0, 0, 0, 0.25);
     --border: rgb(180, 180, 180);
 }
 
-.high-contrast {
-    --primary: var(--text);
-    --color-pf-primary: var(--text);
-    --secondary: var(--text);
-    --color-pf-secondary: var(--background);
-    --tertiary: var(--text);
-    --color-pf-tertiary: var(--text);
-    --color-pf-tertiary-darker: var(--text);
-    --color-pf-alternate: var(--text);
-    --color-pf-alternate-dark: var(--text);
-    --color-text-light-0: var(--text);
-    --tertiary-dark: var(--text);
-    --tertiary-light: var(--text);
-    --body: var(--text);
-    --text-dark: var(--text);
-    --text-light: var(--text);
-    --sidebar-label: var(--text);
-    --sidebar-title: var(--text);
-    --highlightcol: var(--border);
-    --color-border-divider: var(--border);
-    --2: var(--background);
-    --sub: var(--background);
-}
+/* ── D&D 5e (dnd5e2) character sheet overrides ────────────────── */
 
-/* Set colours for hovering */
 .actor.sheet.character.high-contrast {
 
-    button:not(:disabled):hover {
-        box-shadow: none !important;
-        text-shadow: none !important;
-        background: var(--glow) !important;
-    }
+    /* Override dnd5e system colour tokens */
+    --dnd5e-color-gold: var(--border);
+    --dnd5e-color-parchment: var(--background);
+    --color-text-primary: var(--text);
+    --color-text-secondary: var(--text);
+    --color-text-tertiary: var(--text);
+    --color-border: var(--border);
+    --color-shadow-primary: transparent;
+    --color-shadow-highlight: transparent;
+    --dnd5e-background-card: var(--background-2);
+    --dnd5e-background-header: var(--background-2);
 
-    .sheet-navigation .item:hover {
-        background: var(--glow) !important;
-        text-shadow: none !important;
-    }
-
-    /* Removes background images from the shield and AC widgets */
-    .armor-class div {
-        background: none !important;
-    }
-
-    /* Removes texture from the navbar */
-    nav.sheet-navigation {
-        background: var(--background-2) !important;
-        box-shadow: none !important;
-    }
-
-    /* Removes box around the actor image */
-    .actor-image {
-        box-shadow: none !important;
-        filter: unset;
-    }
-
-    a.d20 {
-        filter: none !important;
-    }
-
-    .symbol {
-        box-shadow: none !important;
-        filter: invert(1);
-    }
-
-    .logo {
-        filter: grayscale(1);
-    }
-
-    .crb-style .sheet-body .sheet-content {
-        .tab.character .pc h3 {
-            background: var(--background-2) !important;
-        }
-        ol.directory-list { 
-            .action-header {
-            color: var(--text) !important;
-            background: var(--background-2) !important;
-            }
-            h3 input.item-name-input {
-                color: var(--text);
-                background: var(--background);
-            }
-        }
-    }
-
-    /* The modifiers buttons */
-    .crb-style .pf-rank {
-        color: var(--text) !important;
-        background: var(--background-2) !important;
-        border: none !important;
-    }
-    /* Tags (IWR etc) */
-    .crb-style .tag {
-        color: var(--text) !important;
-        background: var(--background-2) !important;
-        border: none !important;
-        box-shadow: none !important;
-    }
-    /* Selectors, including the skill training selectors */
-    select {
-        color: var(--text) !important;
-        background: var(--background-2) !important;
-        border-color: var(--highlightcol) !important;
-        box-shadow: none !important;
-    }
-
-    .item-name {
-        color: var(--text) !important;
-        background: none !important;
-        text-shadow: none !important;
-    }
-
-    .crb-style .sheet-body .sheet-content .tab.inventory {
-        .wealth {
-            color: var(--text);
-            background: var(--background-2);
-            box-shadow: none;
-        }
-        .inventory-header {
-            color: var(--text);
-            background: var(--background-2);
-            box-shadow: none;
-        }
-    }
-
-    /* The div with the currency icons on the Inventory page */
-    .currency {
-        box-shadow: none;
-    }
-    .currency li {
-        color: var(--text);
-        background: var(--background);
-        text-shadow: none;
-    }
-    /* The box around the currency icons */
-    .currency-image {
-        box-shadow: 0 0 0 1px var(--background), 0 0 0 1px transparent, 0 0 0 2px var(--text);
-    }
-
-    /* The item section headers in the inventory */
-    .inventory {
-        header {
-            color: var(--text) !important;
-            background: var(--background) !important;
-            border: 1px solid var(--border);
-        }
-        /* The item lists in the inventory */
-        .items {
-            border: none !important;
-        }
-    }
-
-    /* The encumbrance bar in the inventory screen */
-    /* (This is the only place that should remain white in light mode bc the background is always dark) */
-    .encumbrance-label {
-        color: white !important;
-    }
-
+    /* Window */
     .window-content {
         color: var(--text);
         background: var(--background);
     }
 
-    button {
+    /* Sheet header */
+    .sheet-header {
+        background: var(--background) !important;
+        border-color: var(--border) !important;
+        box-shadow: none !important;
+    }
+
+    /* Portrait */
+    .portrait img, .profile-img, .actor-image img {
+        box-shadow: none !important;
+    }
+
+    /* Header text and labels */
+    .header-details, .header-details * {
+        background: none !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+    }
+
+    /* Inputs, textareas, selects */
+    input, textarea, select {
         color: var(--text) !important;
         background: var(--background) !important;
-        border-color: var(--highlightcol) !important;
+        border-color: var(--border) !important;
+        box-shadow: none !important;
     }
 
-    h6 {
-        color: var(--text) !important;
-        background: var(--background) !important;
-        border-color: var(--highlightcol) !important;
-    }
-
-    .item-controls {
-        color: var(--text) !important;
-    }
-
-    h3 {
-        color: var(--text) !important;
-        border-color: var(--highlightcol) !important;
-    }
-
-    .crb-style .sheet-body .sheet-content {
-        .blue-button {
+    /* Navigation tabs */
+    nav.tabs, .sheet-tabs {
+        .item {
             color: var(--text) !important;
-            background: var(--background) !important;
-        }
-        .tab.character .character-details .alignment {
-            background: none;
-            &::after {
-                background: none;
+            background: var(--background-2) !important;
+            text-shadow: none !important;
+            border-color: var(--border) !important;
+            &.active, &:hover {
+                background: var(--glow) !important;
+                color: var(--back) !important;
+                box-shadow: none !important;
             }
         }
     }
 
-    .data-value {
-        border-color: var(--highlightcol) !important;
+    /* Sheet body */
+    .sheet-body {
+        background: var(--background) !important;
     }
 
-    form.editable {
-        background: none;
+    /* Section headers */
+    h3, h4, h5 {
+        color: var(--text) !important;
+        border-color: var(--border) !important;
+        background: none !important;
+        text-shadow: none !important;
     }
 
-    .crb-style nav.sheet-navigation .item {
-        fill: var(--text);
-        background: var(--background);
-        box-shadow: var(--highlight);
-        &:hover, &.active {
-            fill: var(--text);
-            background: var(--back);
+    /* Ability scores */
+    .abilities .ability {
+        color: var(--text) !important;
+        background: var(--background) !important;
+        border-color: var(--border) !important;
+        box-shadow: none !important;
+
+        .score, .modifier, .mod, abbr {
+            color: var(--text) !important;
+            background: none !important;
         }
     }
 
-    nav.sub-nav {
+    /* Skills */
+    .skills-list .skill {
+        color: var(--text) !important;
+
+        .skill-name, .skill-mod, .passive-score {
+            color: var(--text) !important;
+        }
+    }
+
+    /* Saving throws */
+    .saves-list .saving-throw {
+        color: var(--text) !important;
+    }
+
+    /* Proficiency / training pips */
+    .proficiency-cycle, .proficiency {
+        color: var(--text) !important;
+        border-color: var(--border) !important;
+        background: var(--background) !important;
+    }
+
+    /* HP, AC, Initiative, Hit Dice, Death Saves */
+    .hit-points, .ac, .initiative, .hit-dice, .death-saves {
+        color: var(--text) !important;
+        background: var(--background) !important;
+        border-color: var(--border) !important;
+        box-shadow: none !important;
+
+        input { background: var(--background) !important; }
+    }
+
+    /* Spell slots */
+    .pips .pip, .slot-pip {
+        border-color: var(--border) !important;
+        background: var(--background-2) !important;
+
+        &.filled {
+            background: var(--text) !important;
+        }
+    }
+
+    /* Item list entries */
+    .item-list .item, .items-list .item {
+        color: var(--text) !important;
+        background: var(--background) !important;
+        border-color: var(--border) !important;
+
+        &:hover { background: var(--background-2) !important; }
+
+        .item-name, .name {
+            color: var(--text) !important;
+            text-shadow: none !important;
+        }
+    }
+
+    /* Item and action control icons */
+    .item-controls, .item-controls a,
+    .controls, .controls a {
+        color: var(--text) !important;
+    }
+
+    /* Inventory / feature section headers */
+    .items-header, .inventory-header, .item-header {
         color: var(--text) !important;
         background: var(--background-2) !important;
+        border-color: var(--border) !important;
+        box-shadow: none !important;
     }
 
-    input {
+    /* Tags, badges, traits, conditions */
+    .tag, .badge, .trait-tag, .condition-label {
+        color: var(--text) !important;
+        background: var(--background-2) !important;
+        border-color: var(--border) !important;
+        box-shadow: none !important;
+    }
+
+    /* Currency */
+    .currency li, .currencies li {
         color: var(--text) !important;
         background: var(--background) !important;
+        text-shadow: none !important;
     }
 
-    .crb-style aside {
-        background: none !important;
-        .sidebar {
-            .armor-class .shield-stats ol li .shield-label svg path {
-                fill: var(--background);
-                stroke: var(--text);
-            }
-            .hitpoints .hp-big .container.current-hp {
-                background: none !important;
-            }
-            div.shield {
-                background: none !important;      
-            }
+    /* Encumbrance bar — label stays white for legibility against dark bar */
+    .encumbrance-label {
+        color: white !important;
+    }
+
+    /* Buttons */
+    button:not(:disabled) {
+        color: var(--text) !important;
+        background: var(--background) !important;
+        border-color: var(--border) !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+
+        &:hover {
+            background: var(--glow) !important;
+            color: var(--back) !important;
         }
     }
 
-    .crb-style header.char-header .char-level .level {
-        background: none;
+    /* Activation cost labels ("1 Action", "Bonus Action", etc.) */
+    .activation-cost, .activation {
+        color: var(--text) !important;
+        background: none !important;
     }
 
+    /* Sidebar / aside panels */
+    aside, .sidebar {
+        background: var(--background) !important;
+        border-color: var(--border) !important;
+    }
 }
+
