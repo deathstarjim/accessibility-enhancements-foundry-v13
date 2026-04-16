@@ -1,0 +1,62 @@
+#compendium-browser[imagePreview] [data-tab="bestiary"] li.item {
+    align-content: center;
+    padding-top: none;
+    padding-bottom: none;
+    //Both states
+    div.image {
+        width: 2.5rem;
+        height: 2.5rem;
+        padding: 3px 0;
+        border-radius: 2px;
+        img {
+            border: none;
+        }
+    }
+    // Hover only
+    div.image:hover {
+        overflow: visible;
+        justify-content: flex-start;
+        align-items: flex-start;
+        img {
+            pointer-events: none;
+            z-index: 1;
+            background: #00000080;
+            border-radius: 10px;
+            border: 1px solid #525252;
+            padding: 0.2rem;
+            box-shadow: 0 0 8px inset #cccccccc;
+            backdrop-filter: blur(1.5px);
+            transition-delay: 0.2s;
+            transition: max-width 0.25s ease-out;
+        }
+    }
+    // Not hovered
+    div.image:not(:hover) {
+        overflow: hidden;
+        img {
+            max-width: 110%;
+        }
+    }
+}
+
+// Sets the sizes
+#compendium-browser[imagePreview = "tiny"] [data-tab="bestiary"] div.image:hover img {
+    max-height: 160px;
+    max-width: 160px
+}
+#compendium-browser[imagePreview = "small"] [data-tab="bestiary"] div.image:hover img {
+    max-height: 200px;
+    max-width: 200px
+}
+#compendium-browser[imagePreview = "medium"] [data-tab="bestiary"] div.image:hover img {
+    max-height: 240px;
+    max-width: 240px
+}
+#compendium-browser[imagePreview = "large"] [data-tab="bestiary"] div.image:hover img {
+    max-height: 280px;
+    max-width: 280px
+}
+#compendium-browser[imagePreview = "huge"] [data-tab="bestiary"] div.image:hover img {
+    max-height: 320px;
+    max-width: 320px
+}

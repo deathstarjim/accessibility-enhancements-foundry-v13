@@ -1,0 +1,380 @@
+/* ============================================================
+   Accessibility Enhancements — main.css
+   Compiled from main.less (highcontrast.less + compendiumbrowser.less)
+   plus hand-authored screen-reader and focus utilities.
+   ============================================================ */
+
+/* ----------------------------------------------------------
+   Screen-reader-only utility
+   Visually hidden but still read by assistive technology.
+   Used by the ARIA live regions in screenreader.js.
+   ---------------------------------------------------------- */
+.ae-sr-only {
+  position: absolute;
+  left: -9999px;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ----------------------------------------------------------
+   Enhanced keyboard focus indicators
+   :focus-visible targets keyboard users only, so mouse users
+   are not affected by the extra outline.
+   ---------------------------------------------------------- */
+:focus-visible {
+  outline: 3px solid #4d9fec !important;
+  outline-offset: 2px !important;
+}
+
+/* Stronger contrast for focused buttons / links inside windows */
+.app :focus-visible,
+.application :focus-visible {
+  outline: 3px solid #4d9fec !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #4d9fec !important;
+}
+
+
+.dark {
+  --text: white;
+  --back: black;
+  --color-pf-primary: white;
+  --background: #282828;
+  --background-2: #505050;
+  --glow: #80ffff;
+  --highlight: 0 0 0 1px var(--text), 0 0 0 2px #93d1d3, inset 0 0 4px rgba(255, 255, 255, 0.25);
+  --border: #505050;
+}
+
+.light {
+  --text: black;
+  --back: white;
+  --color-pf-primary: black;
+  --background: #dcdcdc;
+  --background-2: #c8c8c8;
+  --glow: #ffd280;
+  --highlight: 0 0 0 1px var(--text), 0 0 0 2px var(--background-2), inset 0 0 4px rgba(0, 0, 0, 0.25);
+  --border: #b4b4b4;
+}
+
+.high-contrast {
+  --primary: var(--text);
+  --color-pf-primary: var(--text);
+  --secondary: var(--text);
+  --color-pf-secondary: var(--background);
+  --tertiary: var(--text);
+  --color-pf-tertiary: var(--text);
+  --color-pf-tertiary-darker: var(--text);
+  --color-pf-alternate: var(--text);
+  --color-pf-alternate-dark: var(--text);
+  --color-text-light-0: var(--text);
+  --tertiary-dark: var(--text);
+  --tertiary-light: var(--text);
+  --body: var(--text);
+  --text-dark: var(--text);
+  --text-light: var(--text);
+  --sidebar-label: var(--text);
+  --sidebar-title: var(--text);
+  --highlightcol: var(--border);
+  --color-border-divider: var(--border);
+  --2: var(--background);
+  --sub: var(--background);
+}
+
+/* Set colours for hovering */
+.actor.sheet.character.high-contrast {
+  /* Removes background images from the shield and AC widgets */
+  /* Removes texture from the navbar */
+  /* Removes box around the actor image */
+  /* The modifiers buttons */
+  /* Tags (IWR etc) */
+  /* Selectors, including the skill training selectors */
+  /* The div with the currency icons on the Inventory page */
+  /* The box around the currency icons */
+  /* The item section headers in the inventory */
+  /* The encumbrance bar in the inventory screen */
+}
+
+.actor.sheet.character.high-contrast button:not(:disabled):hover {
+  box-shadow: none !important;
+  text-shadow: none !important;
+  background: var(--glow) !important;
+}
+
+.actor.sheet.character.high-contrast .sheet-navigation .item:hover {
+  background: var(--glow) !important;
+  text-shadow: none !important;
+}
+
+.actor.sheet.character.high-contrast .armor-class div {
+  background: none !important;
+}
+
+.actor.sheet.character.high-contrast nav.sheet-navigation {
+  background: var(--background-2) !important;
+  box-shadow: none !important;
+}
+
+.actor.sheet.character.high-contrast .actor-image {
+  box-shadow: none !important;
+  filter: unset;
+}
+
+.actor.sheet.character.high-contrast a.d20 {
+  filter: none !important;
+}
+
+.actor.sheet.character.high-contrast .symbol {
+  box-shadow: none !important;
+  filter: invert(1);
+}
+
+.actor.sheet.character.high-contrast .logo {
+  filter: grayscale(1);
+}
+
+.actor.sheet.character.high-contrast .crb-style .sheet-body .sheet-content .tab.character .pc h3 {
+  background: var(--background-2) !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style .sheet-body .sheet-content ol.directory-list .action-header {
+  color: var(--text) !important;
+  background: var(--background-2) !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style .sheet-body .sheet-content ol.directory-list h3 input.item-name-input {
+  color: var(--text);
+  background: var(--background);
+}
+
+.actor.sheet.character.high-contrast .crb-style .pf-rank {
+  color: var(--text) !important;
+  background: var(--background-2) !important;
+  border: none !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style .tag {
+  color: var(--text) !important;
+  background: var(--background-2) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.actor.sheet.character.high-contrast select {
+  color: var(--text) !important;
+  background: var(--background-2) !important;
+  border-color: var(--highlightcol) !important;
+  box-shadow: none !important;
+}
+
+.actor.sheet.character.high-contrast .item-name {
+  color: var(--text) !important;
+  background: none !important;
+  text-shadow: none !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style .sheet-body .sheet-content .tab.inventory .wealth {
+  color: var(--text);
+  background: var(--background-2);
+  box-shadow: none;
+}
+
+.actor.sheet.character.high-contrast .crb-style .sheet-body .sheet-content .tab.inventory .inventory-header {
+  color: var(--text);
+  background: var(--background-2);
+  box-shadow: none;
+}
+
+.actor.sheet.character.high-contrast .currency {
+  box-shadow: none;
+}
+
+.actor.sheet.character.high-contrast .currency li {
+  color: var(--text);
+  background: var(--background);
+  text-shadow: none;
+}
+
+.actor.sheet.character.high-contrast .currency-image {
+  box-shadow: 0 0 0 1px var(--background), 0 0 0 1px transparent, 0 0 0 2px var(--text);
+}
+
+.actor.sheet.character.high-contrast .inventory {
+  /* The item lists in the inventory */
+}
+
+.actor.sheet.character.high-contrast .inventory header {
+  color: var(--text) !important;
+  background: var(--background) !important;
+  border: 1px solid var(--border);
+}
+
+.actor.sheet.character.high-contrast .inventory .items {
+  border: none !important;
+}
+
+.actor.sheet.character.high-contrast .encumbrance-label {
+  color: white !important;
+}
+
+.actor.sheet.character.high-contrast .window-content {
+  color: var(--text);
+  background: var(--background);
+}
+
+.actor.sheet.character.high-contrast button {
+  color: var(--text) !important;
+  background: var(--background) !important;
+  border-color: var(--highlightcol) !important;
+}
+
+.actor.sheet.character.high-contrast h6 {
+  color: var(--text) !important;
+  background: var(--background) !important;
+  border-color: var(--highlightcol) !important;
+}
+
+.actor.sheet.character.high-contrast .item-controls {
+  color: var(--text) !important;
+}
+
+.actor.sheet.character.high-contrast h3 {
+  color: var(--text) !important;
+  border-color: var(--highlightcol) !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style .sheet-body .sheet-content .blue-button {
+  color: var(--text) !important;
+  background: var(--background) !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style .sheet-body .sheet-content .tab.character .character-details .alignment {
+  background: none;
+}
+
+.actor.sheet.character.high-contrast .crb-style .sheet-body .sheet-content .tab.character .character-details .alignment::after {
+  background: none;
+}
+
+.actor.sheet.character.high-contrast .data-value {
+  border-color: var(--highlightcol) !important;
+}
+
+.actor.sheet.character.high-contrast form.editable {
+  background: none;
+}
+
+.actor.sheet.character.high-contrast .crb-style nav.sheet-navigation .item {
+  fill: var(--text);
+  background: var(--background);
+  box-shadow: var(--highlight);
+}
+
+.actor.sheet.character.high-contrast .crb-style nav.sheet-navigation .item:hover,
+.actor.sheet.character.high-contrast .crb-style nav.sheet-navigation .item.active {
+  fill: var(--text);
+  background: var(--back);
+}
+
+.actor.sheet.character.high-contrast nav.sub-nav {
+  color: var(--text) !important;
+  background: var(--background-2) !important;
+}
+
+.actor.sheet.character.high-contrast input {
+  color: var(--text) !important;
+  background: var(--background) !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style aside {
+  background: none !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style aside .sidebar .armor-class .shield-stats ol li .shield-label svg path {
+  fill: var(--background);
+  stroke: var(--text);
+}
+
+.actor.sheet.character.high-contrast .crb-style aside .sidebar .hitpoints .hp-big .container.current-hp {
+  background: none !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style aside .sidebar div.shield {
+  background: none !important;
+}
+
+.actor.sheet.character.high-contrast .crb-style header.char-header .char-level .level {
+  background: none;
+}
+
+#compendium-browser[imagePreview] [data-tab="bestiary"] li.item {
+  align-content: center;
+  padding-top: none;
+  padding-bottom: none;
+}
+
+#compendium-browser[imagePreview] [data-tab="bestiary"] li.item div.image {
+  width: 2.5rem;
+  height: 2.5rem;
+  padding: 3px 0;
+  border-radius: 2px;
+}
+
+#compendium-browser[imagePreview] [data-tab="bestiary"] li.item div.image img {
+  border: none;
+}
+
+#compendium-browser[imagePreview] [data-tab="bestiary"] li.item div.image:hover {
+  overflow: visible;
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+#compendium-browser[imagePreview] [data-tab="bestiary"] li.item div.image:hover img {
+  pointer-events: none;
+  z-index: 1;
+  background: #00000080;
+  border-radius: 10px;
+  border: 1px solid #525252;
+  padding: 0.2rem;
+  box-shadow: 0 0 8px inset #cccccccc;
+  backdrop-filter: blur(1.5px);
+  transition-delay: 0.2s;
+  transition: max-width 0.25s ease-out;
+}
+
+#compendium-browser[imagePreview] [data-tab="bestiary"] li.item div.image:not(:hover) {
+  overflow: hidden;
+}
+
+#compendium-browser[imagePreview] [data-tab="bestiary"] li.item div.image:not(:hover) img {
+  max-width: 110%;
+}
+
+#compendium-browser[imagePreview="tiny"] [data-tab="bestiary"] div.image:hover img {
+  max-height: 160px;
+  max-width: 160px;
+}
+
+#compendium-browser[imagePreview="small"] [data-tab="bestiary"] div.image:hover img {
+  max-height: 200px;
+  max-width: 200px;
+}
+
+#compendium-browser[imagePreview="medium"] [data-tab="bestiary"] div.image:hover img {
+  max-height: 240px;
+  max-width: 240px;
+}
+
+#compendium-browser[imagePreview="large"] [data-tab="bestiary"] div.image:hover img {
+  max-height: 280px;
+  max-width: 280px;
+}
+
+#compendium-browser[imagePreview="huge"] [data-tab="bestiary"] div.image:hover img {
+  max-height: 320px;
+  max-width: 320px;
+}

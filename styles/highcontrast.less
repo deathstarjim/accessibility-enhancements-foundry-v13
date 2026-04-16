@@ -1,0 +1,269 @@
+/* A bunch of disgusting CSS overrides that hit the system's CSS like a hammer to remove as much colour as possible */
+
+.dark {
+    --text: white;
+    --back: black;
+    --color-pf-primary: white;
+    --background: rgb(40, 40, 40);
+    --background-2: rgb(80, 80, 80);
+    --glow: rgb(128, 255, 255);
+    --highlight: 0 0 0 1px var(--text), 0 0 0 2px #93d1d3, inset 0 0 4px rgba(255, 255, 255, 0.25);
+    --border: rgb(80, 80, 80);
+}
+
+.light {
+    --text: black;
+    --back: white;
+    --color-pf-primary: black;
+    --background: rgb(220, 220, 220);
+    --background-2: rgb(200, 200, 200);
+    --glow: rgb(255, 210, 128);
+    --highlight: 0 0 0 1px var(--text), 0 0 0 2px  var(--background-2), inset 0 0 4px rgba(0, 0, 0, 0.25);
+    --border: rgb(180, 180, 180);
+}
+
+.high-contrast {
+    --primary: var(--text);
+    --color-pf-primary: var(--text);
+    --secondary: var(--text);
+    --color-pf-secondary: var(--background);
+    --tertiary: var(--text);
+    --color-pf-tertiary: var(--text);
+    --color-pf-tertiary-darker: var(--text);
+    --color-pf-alternate: var(--text);
+    --color-pf-alternate-dark: var(--text);
+    --color-text-light-0: var(--text);
+    --tertiary-dark: var(--text);
+    --tertiary-light: var(--text);
+    --body: var(--text);
+    --text-dark: var(--text);
+    --text-light: var(--text);
+    --sidebar-label: var(--text);
+    --sidebar-title: var(--text);
+    --highlightcol: var(--border);
+    --color-border-divider: var(--border);
+    --2: var(--background);
+    --sub: var(--background);
+}
+
+/* Set colours for hovering */
+.actor.sheet.character.high-contrast {
+
+    button:not(:disabled):hover {
+        box-shadow: none !important;
+        text-shadow: none !important;
+        background: var(--glow) !important;
+    }
+
+    .sheet-navigation .item:hover {
+        background: var(--glow) !important;
+        text-shadow: none !important;
+    }
+
+    /* Removes background images from the shield and AC widgets */
+    .armor-class div {
+        background: none !important;
+    }
+
+    /* Removes texture from the navbar */
+    nav.sheet-navigation {
+        background: var(--background-2) !important;
+        box-shadow: none !important;
+    }
+
+    /* Removes box around the actor image */
+    .actor-image {
+        box-shadow: none !important;
+        filter: unset;
+    }
+
+    a.d20 {
+        filter: none !important;
+    }
+
+    .symbol {
+        box-shadow: none !important;
+        filter: invert(1);
+    }
+
+    .logo {
+        filter: grayscale(1);
+    }
+
+    .crb-style .sheet-body .sheet-content {
+        .tab.character .pc h3 {
+            background: var(--background-2) !important;
+        }
+        ol.directory-list { 
+            .action-header {
+            color: var(--text) !important;
+            background: var(--background-2) !important;
+            }
+            h3 input.item-name-input {
+                color: var(--text);
+                background: var(--background);
+            }
+        }
+    }
+
+    /* The modifiers buttons */
+    .crb-style .pf-rank {
+        color: var(--text) !important;
+        background: var(--background-2) !important;
+        border: none !important;
+    }
+    /* Tags (IWR etc) */
+    .crb-style .tag {
+        color: var(--text) !important;
+        background: var(--background-2) !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+    /* Selectors, including the skill training selectors */
+    select {
+        color: var(--text) !important;
+        background: var(--background-2) !important;
+        border-color: var(--highlightcol) !important;
+        box-shadow: none !important;
+    }
+
+    .item-name {
+        color: var(--text) !important;
+        background: none !important;
+        text-shadow: none !important;
+    }
+
+    .crb-style .sheet-body .sheet-content .tab.inventory {
+        .wealth {
+            color: var(--text);
+            background: var(--background-2);
+            box-shadow: none;
+        }
+        .inventory-header {
+            color: var(--text);
+            background: var(--background-2);
+            box-shadow: none;
+        }
+    }
+
+    /* The div with the currency icons on the Inventory page */
+    .currency {
+        box-shadow: none;
+    }
+    .currency li {
+        color: var(--text);
+        background: var(--background);
+        text-shadow: none;
+    }
+    /* The box around the currency icons */
+    .currency-image {
+        box-shadow: 0 0 0 1px var(--background), 0 0 0 1px transparent, 0 0 0 2px var(--text);
+    }
+
+    /* The item section headers in the inventory */
+    .inventory {
+        header {
+            color: var(--text) !important;
+            background: var(--background) !important;
+            border: 1px solid var(--border);
+        }
+        /* The item lists in the inventory */
+        .items {
+            border: none !important;
+        }
+    }
+
+    /* The encumbrance bar in the inventory screen */
+    /* (This is the only place that should remain white in light mode bc the background is always dark) */
+    .encumbrance-label {
+        color: white !important;
+    }
+
+    .window-content {
+        color: var(--text);
+        background: var(--background);
+    }
+
+    button {
+        color: var(--text) !important;
+        background: var(--background) !important;
+        border-color: var(--highlightcol) !important;
+    }
+
+    h6 {
+        color: var(--text) !important;
+        background: var(--background) !important;
+        border-color: var(--highlightcol) !important;
+    }
+
+    .item-controls {
+        color: var(--text) !important;
+    }
+
+    h3 {
+        color: var(--text) !important;
+        border-color: var(--highlightcol) !important;
+    }
+
+    .crb-style .sheet-body .sheet-content {
+        .blue-button {
+            color: var(--text) !important;
+            background: var(--background) !important;
+        }
+        .tab.character .character-details .alignment {
+            background: none;
+            &::after {
+                background: none;
+            }
+        }
+    }
+
+    .data-value {
+        border-color: var(--highlightcol) !important;
+    }
+
+    form.editable {
+        background: none;
+    }
+
+    .crb-style nav.sheet-navigation .item {
+        fill: var(--text);
+        background: var(--background);
+        box-shadow: var(--highlight);
+        &:hover, &.active {
+            fill: var(--text);
+            background: var(--back);
+        }
+    }
+
+    nav.sub-nav {
+        color: var(--text) !important;
+        background: var(--background-2) !important;
+    }
+
+    input {
+        color: var(--text) !important;
+        background: var(--background) !important;
+    }
+
+    .crb-style aside {
+        background: none !important;
+        .sidebar {
+            .armor-class .shield-stats ol li .shield-label svg path {
+                fill: var(--background);
+                stroke: var(--text);
+            }
+            .hitpoints .hp-big .container.current-hp {
+                background: none !important;
+            }
+            div.shield {
+                background: none !important;      
+            }
+        }
+    }
+
+    .crb-style header.char-header .char-level .level {
+        background: none;
+    }
+
+}
