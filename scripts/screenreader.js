@@ -46,6 +46,50 @@ Hooks.on("init", () =>
         onChange: () => { },
     });
 
+    game.settings.register('accessibility-enhancements', 'announceTokenMove', {
+        name: 'Announce Token Movement',
+        hint: 'Screen reader announces when your owned tokens move, including their new grid coordinate.',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false,
+        onChange: () => { },
+    });
+
+    game.settings.register('accessibility-enhancements', 'announceTokenCreateDelete', {
+        name: 'Announce Tokens Entering/Leaving Scene',
+        hint: 'Screen reader announces when tokens are added to or removed from the current scene.',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false,
+        onChange: () => { },
+    });
+
+    game.keybindings.register('accessibility-enhancements', 'whereAmI', {
+        name: 'Where Am I — Read Position & Status',
+        hint: "Announces the controlled token's grid position, HP, and active conditions via the screen reader.",
+        editable: [{ key: 'KeyW' }],
+        onDown: () =>
+        {
+            const token = canvas?.tokens?.controlled?.[0];
+            if (!token)
+            {
+                announceAssertive("No token controlled.");
+                return true;
+            }
+            const parts = [token.name ?? "Token"];
+            const pos = getGridLabel(token);
+            if (pos) parts.push(pos);
+            const hp = getHPString(token);
+            if (hp) parts.push(hp);
+            const cond = getConditionsString(token);
+            if (cond) parts.push(`Conditions: ${cond}`);
+            announceAssertive(parts.join(" \u2014 "));
+            return true;
+        },
+    });
+
 });
 
 // ---------------------------------------------------------------------------
@@ -110,6 +154,70 @@ function announceAssertive(message)
 
 // Expose so other scripts or macros can piggyback on these regions.
 globalThis.AEAnnounce = { polite: announcePolite, assertive: announceAssertive };
+
+// ---------------------------------------------------------------------------
+// Grid coordinate helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a token's canvas position to a human-readable grid label, e.g. "C3".
+ * Columns are A–Z, then AA–AZ, BA–BZ, etc.  Rows are 1-based integers.
+ * Returns an empty string when the grid or canvas is unavailable.
+ * @param {Token} token
+ * @returns {string}
+ */
+function getGridLabel(token)
+{
+    if (!canvas?.grid) return "";
+    try
+    {
+        const { i, j } = canvas.grid.getOffset({ x: token.document.x, y: token.document.y });
+        // Convert 0-based column index to spreadsheet-style letters (A, B, …, Z, AA, …)
+        let col = "";
+        let n = j;
+        do
+        {
+            col = String.fromCharCode(65 + (n % 26)) + col;
+            n = Math.floor(n / 26) - 1;
+        } while (n >= 0);
+        return `${col}${i + 1}`;
+    } catch
+    {
+        return "";
+    }
+}
+
+/**
+ * Return a formatted HP string for a token's actor, e.g. "HP 22 of 30".
+ * Returns null when HP data is unavailable.
+ * @param {Token} token
+ * @returns {string|null}
+ */
+function getHPString(token)
+{
+    const hp = token.actor?.system?.attributes?.hp;
+    if (hp == null || hp.max == null) return null;
+    return `HP ${hp.value} of ${hp.max}`;
+}
+
+/**
+ * Return a comma-separated list of active conditions/effects on a token.
+ * Checks PF2E-specific conditions first, then falls back to generic statuses.
+ * Returns null when no conditions are found.
+ * @param {Token} token
+ * @returns {string|null}
+ */
+function getConditionsString(token)
+{
+    const pf2eConditions = token.actor?.itemTypes?.condition;
+    if (pf2eConditions?.length) return pf2eConditions.map(c => c.name).join(", ");
+    const statuses = token.actor?.statuses;
+    if (statuses?.size) return [...statuses].join(", ");
+    return null;
+}
+
+// Expose helpers for use in other scripts or macros.
+globalThis.AEGrid = { getGridLabel, getHPString, getConditionsString };
 
 // ---------------------------------------------------------------------------
 // Feature: announce incoming chat messages
@@ -193,4 +301,43 @@ Hooks.on("renderNotifications", (app, html) =>
             announcePolite(text);
         }
     }
+});
+
+// ---------------------------------------------------------------------------
+// Feature: announce token movement
+// ---------------------------------------------------------------------------
+
+Hooks.on("updateToken", (tokenDoc, changes) =>
+{
+    if (!game.settings.get('accessibility-enhancements', 'announceTokenMove')) return;
+    if (!("x" in changes) && !("y" in changes)) return;
+
+    // Only announce for tokens the local player owns
+    const token = tokenDoc.object;
+    if (!token?.isOwner) return;
+
+    const name = tokenDoc.name ?? game.i18n.localize("Unknown");
+    const label = getGridLabel(token);
+    const message = label
+        ? `${name} moves to ${label}.`
+        : `${name} moves.`;
+    announcePolite(message);
+});
+
+// ---------------------------------------------------------------------------
+// Feature: announce tokens entering or leaving the scene
+// ---------------------------------------------------------------------------
+
+Hooks.on("createToken", (tokenDoc) =>
+{
+    if (!game.settings.get('accessibility-enhancements', 'announceTokenCreateDelete')) return;
+    const name = tokenDoc.name ?? game.i18n.localize("Unknown");
+    announcePolite(`${name} has entered the scene.`);
+});
+
+Hooks.on("deleteToken", (tokenDoc) =>
+{
+    if (!game.settings.get('accessibility-enhancements', 'announceTokenCreateDelete')) return;
+    const name = tokenDoc.name ?? game.i18n.localize("Unknown");
+    announcePolite(`${name} has left the scene.`);
 });

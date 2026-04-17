@@ -9,7 +9,7 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 *Prerequisite for most canvas announcements — implement first.*
 
 - [ ] **Grid label overlay** — PIXI canvas layer that draws letter (A, B, C…) column headers along the top of the scene and number (1, 2, 3…) row headers down the left side, in world-space so they pan/zoom with the map. Semi-transparent so they don't obscure the map for sighted players. Toggleable per-client.
-- [ ] **Coordinate helper function** — shared utility `getGridLabel(token)` → `"C3"` used by all announcement features below.
+- [x] **Coordinate helper function** — shared utility `getGridLabel(token)` → `"C3"` used by all announcement features below.
 - [ ] **Persistent HUD readout** — small always-visible HTML overlay in a screen corner showing the controlled token's current grid position and HP (e.g. `Thorin — C3 — HP 22/30`). Useful for sighted players helping Michael navigate.
 
 ---
@@ -17,8 +17,8 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 ## 📢 Screen Reader Announcements (canvas / combat)
 *Builds on the ARIA live region system already in `screenreader.js`.*
 
-- [ ] **Token move** — announce name + new grid coordinate when any owned token moves (e.g. "Thorin moves to C3").
-- [ ] **Token enter/leave scene** — announce when a token is added to or removed from the canvas (e.g. "Goblin King has entered the scene.").
+- [x] **Token move** — announce name + new grid coordinate when any owned token moves (e.g. "Thorin moves to C3").
+- [x] **Token enter/leave scene** — announce when a token is added to or removed from the canvas (e.g. "Goblin King has entered the scene.").
 - [ ] **HP / damage changes** — announce damage or healing on owned (and optionally targeted) tokens (e.g. "Thorin takes 8 damage. 22 of 30 HP remaining.").
 - [ ] **Status effects / conditions** — announce when a condition is applied to or removed from an owned token (e.g. "Prone applied to Thorin." / "Frightened 1 removed.").
 - [ ] **Dice roll results** — announce the result and total of any roll in the chat (e.g. "Attack roll: 17.").
@@ -28,7 +28,7 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 ## ⌨️ Keyboard & No-Mouse Navigation
 *Reducing the need for click-and-drag is the highest-value area for Michael.*
 
-- [ ] **"Where am I" hotkey** — configurable keybind (default: `W`) that re-reads the controlled token's position, HP, and any active conditions via the assertive live region. Works on demand without any interaction.
+- [x] **"Where am I" hotkey** — configurable keybind (default: `W`) that re-reads the controlled token's position, HP, and any active conditions via the assertive live region. Works on demand without any interaction.
 - [ ] **Tab through nearby tokens** — Tab/Shift-Tab to cycle through tokens on the canvas; Enter to select/control, Shift+Enter to target. Replaces needing to click tokens.
 - [ ] **Keyboard token targeting** — dedicated keybind to toggle targeting on the currently focused/controlled token. Avoids right-click dependency entirely.
 - [ ] **Arrow key token movement** — move a controlled token one grid square at a time using arrow keys (Foundry has partial support; ensure it works and triggers our announcements).
