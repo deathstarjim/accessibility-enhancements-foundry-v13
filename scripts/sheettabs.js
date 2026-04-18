@@ -482,7 +482,7 @@ function isInventoryKeyboardActionTarget(element)
     if (!(element instanceof HTMLElement)) return false;
 
     return element.matches(
-        ".item-name, .tidy-table-row-use-button, .item-toggle, .command.decrementer, .command.incrementer, .button.button-icon-only"
+        ".item-name, .tidy-table-row-use-button, .item-toggle, .command.decrementer, .command.incrementer, .tidy-table-button, .button.button-icon-only"
     ) || isLikelyInventoryMenuTrigger(element);
 }
 
@@ -553,6 +553,15 @@ function getInventoryControlLabel(element)
         return itemName ? `Toggle ${itemName}` : "Toggle item";
     }
 
+    if (element.matches(".tidy-table-button"))
+    {
+        const explicitLabel = element.getAttribute("aria-label")
+            || element.getAttribute("title")
+            || element.dataset.tooltip;
+        if (explicitLabel) return itemName ? `${explicitLabel} for ${itemName}` : explicitLabel;
+        return itemName ? `Item action for ${itemName}` : "Item action";
+    }
+
     if (element.matches(".command.decrementer"))
     {
         return itemName ? `Decrease quantity for ${itemName}` : "Decrease quantity";
@@ -585,7 +594,7 @@ function applyInventoryAccessibility(root)
         if (label && !control.getAttribute("aria-label")) control.setAttribute("aria-label", label);
 
         if (
-            (control.matches(".item-name, .tidy-table-row-use-button, .item-toggle, .command.decrementer, .command.incrementer, .button.button-icon-only")
+            (control.matches(".item-name, .tidy-table-row-use-button, .item-toggle, .command.decrementer, .command.incrementer, .tidy-table-button, .button.button-icon-only")
                 || isLikelyInventoryMenuTrigger(control))
             && !control.hasAttribute("tabindex")
             && !control.matches("button, input, select, textarea, a[href]")

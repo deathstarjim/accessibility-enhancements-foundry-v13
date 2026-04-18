@@ -26,6 +26,16 @@ Hooks.on("init", () =>
         onChange: () => { },
     });
 
+    game.settings.register('accessibility-enhancements', 'announceRollResults', {
+        name: 'Announce Roll Results',
+        hint: 'Screen reader announces dice roll flavor and totals when roll cards appear in chat.',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false,
+        onChange: () => { },
+    });
+
     game.settings.register('accessibility-enhancements', 'announceCombatTurns', {
         name: 'Announce Combat Turns',
         hint: 'Screen reader announces when the active combatant changes. You will get a louder alert when it is your own turn.',
@@ -105,6 +115,7 @@ Hooks.on("ready", () =>
         polite.setAttribute("role", "status");
         polite.setAttribute("aria-live", "polite");
         polite.setAttribute("aria-atomic", "true");
+        polite.setAttribute("aria-relevant", "additions text");
         polite.className = "ae-sr-only";
         document.body.appendChild(polite);
     }
@@ -116,6 +127,7 @@ Hooks.on("ready", () =>
         assertive.setAttribute("role", "alert");
         assertive.setAttribute("aria-live", "assertive");
         assertive.setAttribute("aria-atomic", "true");
+        assertive.setAttribute("aria-relevant", "additions text");
         assertive.className = "ae-sr-only";
         document.body.appendChild(assertive);
     }
@@ -153,7 +165,110 @@ function announceAssertive(message)
 }
 
 // Expose so other scripts or macros can piggyback on these regions.
-globalThis.AEAnnounce = { polite: announcePolite, assertive: announceAssertive };
+globalThis.AEAnnounce = {
+    polite: announcePolite,
+    assertive: announceAssertive,
+    testPolite: (message = "Accessibility Enhancements polite announcement test.") => announcePolite(message),
+    testAssertive: (message = "Accessibility Enhancements assertive announcement test.") => announceAssertive(message),
+};
+
+const AE_ANNOUNCED_ROLL_MESSAGES = new Map();
+
+function getRenderedApplicationRoot(html)
+{
+    return html instanceof HTMLElement ? html : html?.[0] instanceof HTMLElement ? html[0] : null;
+}
+
+function stripHtmlToText(html)
+{
+    if (!html) return "";
+    const tempDiv = document.createElement("div");
+    tempDiv.innerHTML = html;
+    return tempDiv.textContent?.trim() || "";
+}
+
+function normalizeAnnouncementText(text)
+{
+    return text?.replace(/\s+/g, " ").trim() || "";
+}
+
+function getSpeakerName(message)
+{
+    return message.speaker?.alias || message.author?.name || game.i18n.localize("Unknown");
+}
+
+function getRollAnnouncement(message, root)
+{
+    const speaker = getSpeakerName(message);
+    const flavor = normalizeAnnouncementText(
+        root?.querySelector(".dice-flavor")?.textContent
+        || message.flavor
+        || ""
+    );
+
+    const totals = [
+        ...new Set(
+            [
+                ...root?.querySelectorAll?.(".dice-total") ?? [],
+            ]
+                .map(element => normalizeAnnouncementText(element.textContent))
+                .filter(Boolean)
+        ),
+    ];
+
+    if (!totals.length && Array.isArray(message.rolls))
+    {
+        for (const roll of message.rolls)
+        {
+            const total = roll?.total;
+            if (total === undefined || total === null) continue;
+            totals.push(String(total));
+        }
+    }
+
+    if (!totals.length) return null;
+
+    const parts = [speaker];
+    if (flavor) parts.push(flavor);
+
+    if (totals.length === 1)
+    {
+        parts.push(`Total ${totals[0]}.`);
+    } else
+    {
+        parts.push(`Totals ${totals.join(", ")}.`);
+    }
+
+    return parts.join(". ").replace(/\.\s+\./g, ". ");
+}
+
+function shouldAnnounceRollMessage(message, announcement)
+{
+    if (!message?.id || !announcement) return !!announcement;
+
+    const previousAnnouncement = AE_ANNOUNCED_ROLL_MESSAGES.get(message.id);
+    if (previousAnnouncement === announcement) return false;
+
+    AE_ANNOUNCED_ROLL_MESSAGES.set(message.id, announcement);
+
+    if (AE_ANNOUNCED_ROLL_MESSAGES.size > 100)
+    {
+        const oldestKey = AE_ANNOUNCED_ROLL_MESSAGES.keys().next().value;
+        if (oldestKey) AE_ANNOUNCED_ROLL_MESSAGES.delete(oldestKey);
+    }
+
+    return true;
+}
+
+function announceRollResult(message, root = null)
+{
+    if (!game.settings.get('accessibility-enhancements', 'announceRollResults')) return;
+
+    const announcement = getRollAnnouncement(message, root);
+    if (!shouldAnnounceRollMessage(message, announcement)) return;
+
+    announcePolite(announcement);
+}
 
 // ---------------------------------------------------------------------------
 // Grid coordinate helpers
@@ -225,16 +340,36 @@ globalThis.AEGrid = { getGridLabel, getHPString, getConditionsString };
 
 Hooks.on("createChatMessage", (message) =>
 {
+    if (game.settings.get('accessibility-enhancements', 'announceRollResults') && (message.isRoll || message.rolls?.length))
+    {
+        announceRollResult(message);
+        return;
+    }
+
     if (!game.settings.get('accessibility-enhancements', 'announceChatMessages')) return;
 
-    const speaker = message.speaker?.alias || message.author?.name || game.i18n.localize("Unknown");
-
-    // Strip HTML so the screen reader hears plain text, not tag soup
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = message.content ?? "";
-    const content = tempDiv.textContent?.trim() || "";
+    const speaker = getSpeakerName(message);
+    const content = stripHtmlToText(message.content ?? "");
 
     if (content) announcePolite(`${speaker}: ${content}`);
+});
+
+Hooks.on("updateChatMessage", (message, changed) =>
+{
+    if (!game.settings.get('accessibility-enhancements', 'announceRollResults')) return;
+    if (!("rolls" in changed) && !("content" in changed) && !("flavor" in changed)) return;
+    if (!(message.isRoll || message.rolls?.length)) return;
+
+    announceRollResult(message);
+});
+
+Hooks.on("renderChatMessageHTML", (message, html) =>
+{
+    const root = getRenderedApplicationRoot(html);
+    if (!root) return;
+    if (!(message.isRoll || message.rolls?.length || root.querySelector(".dice-roll, .dice-result, .dice-total"))) return;
+
+    announceRollResult(message, root);
 });
 
 // ---------------------------------------------------------------------------
