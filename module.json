@@ -19,7 +19,8 @@
     "scripts/norightclick.js",
     "scripts/highcontrast.js",
     "scripts/imagepreview.js",
-    "scripts/screenreader.js"
+    "scripts/screenreader.js",
+    "scripts/sheettabs.js"
   ],
   "styles": [
     "styles/main.css"
