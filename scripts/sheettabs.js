@@ -16,12 +16,31 @@ const AE_SHEET_TABS_STATE = {
 };
 
 const AE_SHEET_TABS_DEBUG = true;
+const AE_SHEET_HINTS_ANNOUNCED = new Set();
 
 function debugSheetTabs(message, details)
 {
     if (!AE_SHEET_TABS_DEBUG) return;
     if (details === undefined) console.log(`[AE SheetTabs] ${message}`);
     else console.log(`[AE SheetTabs] ${message}`, details);
+}
+
+function announceSheetTabsHint(app)
+{
+    const appId = app?.id;
+    if (!appId) return;
+    if (AE_SHEET_HINTS_ANNOUNCED.has(appId)) return;
+
+    const polite = globalThis.AEAnnounce?.polite;
+    if (typeof polite !== "function") return;
+
+    AE_SHEET_HINTS_ANNOUNCED.add(appId);
+    polite("Character sheet tabs. Tab moves between tabs. Press Enter to open a tab. Control Tab returns to tabs. Escape leaves the sheet.");
+
+    debugSheetTabs("announced sheet tabs hint", {
+        appId,
+        title: app?.title,
+    });
 }
 
 function isActorSheetApplication(app, root)
@@ -162,6 +181,17 @@ function clearActiveActorSheet(reason)
     AE_SHEET_TABS_STATE.activeRoot = null;
 }
 
+function tryGetActorSheetWindow(app)
+{
+    if (!app) return { app: null, root: null };
+
+    const root = app.element instanceof HTMLElement ? app.element : null;
+    if (!root) return { app: null, root: null };
+    if (!isActorSheetApplication(app, root)) return { app: null, root: null };
+
+    return { app, root };
+}
+
 function releaseSheetKeyboardCapture(root, reason)
 {
     const activeElement = document.activeElement;
@@ -186,7 +216,7 @@ function getActiveActorSheetState()
         debugSheetTabs("getActiveActorSheetState bail: root missing or disconnected", {
             storedAppId: AE_SHEET_TABS_STATE.activeApp?.id,
         });
-        return { app: null, root: null };
+        return tryGetActorSheetWindow(ui?.activeWindow);
     }
     if (!root.matches(".window-app, .application, .actor"))
     {
@@ -195,7 +225,7 @@ function getActiveActorSheetState()
             rootTag: root?.tagName,
             rootClasses: root?.className,
         });
-        return { app: null, root: null };
+        return tryGetActorSheetWindow(ui?.activeWindow);
     }
 
     const activeWindow = ui?.activeWindow;
@@ -210,7 +240,7 @@ function getActiveActorSheetState()
                 activeWindowConstructor: activeWindow?.constructor?.name,
                 activeWindowTitle: activeWindow?.title,
             });
-            return { app: null, root: null };
+            return tryGetActorSheetWindow(activeWindow);
         }
     }
 
@@ -495,6 +525,28 @@ function enhanceActorSheetTabs(app, html)
 
 window.addEventListener("keydown", event =>
 {
+    if (event.ctrlKey && event.key === "Tab")
+    {
+        const { app, root } = getActiveActorSheetState();
+        if (!app || !root) return;
+
+        const activeTab = getActiveTabControl(root) ?? getInitialSheetFocusTarget(root, event.shiftKey);
+        if (!activeTab) return;
+
+        event.preventDefault();
+        setActiveActorSheet(app, root);
+        activeTab.focus({ preventScroll: false });
+        announceSheetTabsHint(app);
+
+        debugSheetTabs("global Ctrl+Tab restored focus to sheet tab", {
+            appId: app?.id,
+            shiftKey: event.shiftKey,
+            tabId: getTabId(activeTab),
+            tabClasses: activeTab?.className,
+        });
+        return;
+    }
+
     if (event.key !== "Tab") return;
     if (event.defaultPrevented) return;
     if (event.ctrlKey || event.altKey || event.metaKey) return;
@@ -546,6 +598,7 @@ window.addEventListener("keydown", event =>
 
     event.preventDefault();
     setActiveActorSheet(app, root);
+    announceSheetTabsHint(app);
     debugSheetTabs("global Tab redirected into sheet", {
         appId: app?.id,
         shiftKey: event.shiftKey,
@@ -574,4 +627,5 @@ Hooks.on("closeApplicationV2", app =>
     if (app !== AE_SHEET_TABS_STATE.activeApp) return;
 
     clearActiveActorSheet("closeApplicationV2");
+    AE_SHEET_HINTS_ANNOUNCED.delete(app?.id);
 });
