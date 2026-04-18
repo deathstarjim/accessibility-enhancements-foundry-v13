@@ -1,3 +1,13 @@
+### v0.5.0
+
+New features:
+- Added keyboard navigation support for the default D&D 5e actor sheets in Foundry v13.
+- Added support for tab-strip navigation with `Tab` / `Shift+Tab` and tab activation with `Enter`.
+- Added keyboard entry into active tab content and keyboard cycling through interactive controls inside the active panel.
+- Added shortcuts to recover or leave sheet focus: `Ctrl+Tab` returns focus to the active sheet tab, while `Escape` and `Ctrl+Shift+Tab` release sheet focus.
+- Added spoken screen reader guidance when keyboard focus enters a character sheet.
+- Added initial sheet-tab keyboard handling that may also help Tidy 5e Sheets, but support for Tidy 5e Sheets has not been fully tested yet.
+
 ### v0.3.1
 
 - Updated CSS to keep up with system updates

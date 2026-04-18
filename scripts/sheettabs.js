@@ -127,6 +127,113 @@ function getFocusableElements(root)
     return [...root.querySelectorAll(selector)].filter(isFocusableElement);
 }
 
+function getFocusableLikeElements(root)
+{
+    const selector = [
+        "a",
+        "button",
+        "input",
+        "select",
+        "textarea",
+        "summary",
+        "label",
+        "[tabindex]",
+        "[contenteditable='true']",
+        "[role='button']",
+        "[role='tab']",
+        "[data-action]",
+        ".rollable",
+        ".control",
+        ".item-name",
+        ".item-control",
+    ].join(", ");
+
+    return [...root.querySelectorAll(selector)].filter(element =>
+    {
+        if (!(element instanceof HTMLElement)) return false;
+        if (element.hidden) return false;
+        if (element.closest("[hidden], [inert], .hidden")) return false;
+        return true;
+    });
+}
+
+function getPreferredPanelEntryTarget(panel)
+{
+    const preferredSelectors = [
+        '[data-action="roll"]',
+        '.skill-name',
+        '.saving-throw',
+        '.ability-check',
+        '.rollable',
+        '.use-ability-roll-button',
+        '.tidy5e-skill-name',
+        '.tool-check-roller',
+        'button',
+        'a',
+    ];
+
+    for (const selector of preferredSelectors)
+    {
+        const candidate = [...panel.querySelectorAll(selector)].find(element =>
+        {
+            if (!(element instanceof HTMLElement)) return false;
+            if (element.hidden) return false;
+            if (element.closest("[hidden], [inert], .hidden")) return false;
+            return true;
+        });
+
+        if (!candidate) continue;
+        if (!candidate.hasAttribute("tabindex")) candidate.tabIndex = 0;
+        return { target: candidate, usedFallback: false, source: `preferred:${selector}` };
+    }
+
+    return null;
+}
+
+function getPanelKeyboardTargets(panel)
+{
+    const selectors = [
+        '[data-action="roll"]',
+        '.skill-name',
+        '.saving-throw',
+        '.ability-check',
+        '.rollable',
+        '.use-ability-roll-button',
+        '.tidy5e-skill-name',
+        '.tool-check-roller',
+        '[data-action]',
+        'button',
+        'a',
+        'input',
+        'select',
+        'textarea',
+    ];
+
+    const seen = new Set();
+    const targets = [];
+
+    for (const selector of selectors)
+    {
+        for (const element of panel.querySelectorAll(selector))
+        {
+            if (!(element instanceof HTMLElement)) continue;
+            if (element.hidden) continue;
+            if (element.closest("[hidden], [inert], .hidden")) continue;
+            if (seen.has(element)) continue;
+
+            if (!element.hasAttribute("tabindex") && !element.matches("button, input, select, textarea, a[href]"))
+            {
+                element.tabIndex = 0;
+            }
+
+            seen.add(element);
+            targets.push(element);
+        }
+    }
+
+    return targets;
+}
+
 function getInitialSheetFocusTarget(root, reverse = false)
 {
     const activeTab = getActiveTabControl(root);
@@ -147,6 +254,25 @@ function isTextEntryElement(element)
 function getFocusableElementsInPanel(panel)
 {
     return getFocusableElements(panel).filter(element => element !== panel);
+}
+
+function getPanelEntryTarget(panel)
+{
+    const focusables = getFocusableElementsInPanel(panel);
+    if (focusables.length) return { target: focusables[0], usedFallback: false, source: "native-focusable" };
+
+    const preferred = getPreferredPanelEntryTarget(panel);
+    if (preferred) return preferred;
+
+    const focusableLike = getFocusableLikeElements(panel).filter(element => element !== panel);
+    const firstCandidate = focusableLike.find(element => !element.matches("[tabindex='-1'], [disabled], [inert]"));
+    if (firstCandidate)
+    {
+        if (!firstCandidate.hasAttribute("tabindex")) firstCandidate.tabIndex = 0;
+        return { target: firstCandidate, usedFallback: false, source: "promoted-focusable" };
+    }
+
+    return { target: panel, usedFallback: true, source: "panel" };
 }
 
 function getActiveTabControl(root)
@@ -338,15 +464,16 @@ function focusActivePanel(root, control)
         requestAnimationFrame(() =>
         {
             const activePanel = findTabPanel(root, control) ?? panel;
-            const firstFocusable = activePanel ? getFocusableElementsInPanel(activePanel)[0] : null;
-            (firstFocusable ?? activePanel)?.focus({ preventScroll: false });
+            const entry = activePanel ? getPanelEntryTarget(activePanel) : { target: panel, usedFallback: true, source: "panel" };
+            entry.target?.focus({ preventScroll: false });
 
             debugSheetTabs("focusActivePanel resolved target", {
                 tabId: getTabId(control),
                 panelId: activePanel?.id,
-                focusedTag: (firstFocusable ?? activePanel)?.tagName,
-                focusedClasses: (firstFocusable ?? activePanel)?.className,
-                usedPanelFallback: !firstFocusable,
+                focusedTag: entry.target?.tagName,
+                focusedClasses: entry.target?.className,
+                usedPanelFallback: entry.usedFallback,
+                source: entry.source,
             });
         });
     });
@@ -354,16 +481,18 @@ function focusActivePanel(root, control)
 
 function activateTabFromKeyboard(root, control, app)
 {
-    const isAlreadyActive = control.classList.contains("active") || control.getAttribute("aria-selected") === "true";
+    const isAlreadyActive = control.classList.contains("active");
 
     debugSheetTabs("activateTabFromKeyboard", {
         appId: app?.id,
         tabId: getTabId(control),
         label: getTabLabel(control),
         isAlreadyActive,
+        ariaSelected: control.getAttribute("aria-selected"),
+        controlClasses: control.className,
     });
 
-    if (!isAlreadyActive) control.click();
+    control.click();
     syncTabAccessibility(root, app);
     focusActivePanel(root, control);
 }
@@ -458,6 +587,45 @@ function attachSheetTabHandlers(root, app)
                 tabIds: controls.map(candidate => getTabId(candidate)),
             });
         }
+    }, true);
+
+    root.addEventListener("keydown", event =>
+    {
+        if (event.key !== "Tab") return;
+        if (event.ctrlKey || event.altKey || event.metaKey) return;
+
+        const activeElement = document.activeElement;
+        if (!(activeElement instanceof HTMLElement)) return;
+        if (!root.contains(activeElement)) return;
+        if (getTabControlFromTarget(activeElement)) return;
+
+        const activeTab = getActiveTabControl(root);
+        const activePanel = activeTab ? findTabPanel(root, activeTab) : null;
+        if (!activePanel || !activePanel.contains(activeElement)) return;
+
+        const targets = getPanelKeyboardTargets(activePanel);
+        const index = targets.indexOf(activeElement);
+        if (index === -1 || !targets.length) return;
+
+        const nextIndex = event.shiftKey
+            ? (index - 1 + targets.length) % targets.length
+            : (index + 1) % targets.length;
+        const nextTarget = targets[nextIndex];
+
+        event.preventDefault();
+        event.stopPropagation();
+        nextTarget.focus({ preventScroll: false });
+
+        debugSheetTabs("panel Tab cycled between panel targets", {
+            appId: app?.id,
+            activeTabId: getTabId(activeTab),
+            fromTag: activeElement.tagName,
+            fromClasses: activeElement.className,
+            toTag: nextTarget?.tagName,
+            toClasses: nextTarget?.className,
+            shiftKey: event.shiftKey,
+            targetCount: targets.length,
+        });
     }, true);
 
     root.addEventListener("click", event =>
