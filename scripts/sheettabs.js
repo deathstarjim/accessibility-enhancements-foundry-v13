@@ -605,28 +605,67 @@ function isVisibleMenuContainer(element)
     return true;
 }
 
+function getVisibleMenuContainer(root)
+{
+    const queryRoots = [
+        root instanceof HTMLElement ? root : null,
+        document.body,
+    ].filter(queryRoot => queryRoot instanceof HTMLElement);
+
+    const containers = queryRoots.flatMap(queryRoot =>
+        [...queryRoot.querySelectorAll("menu, [role='menu'], .context-menu, .dropdown-menu, .item-context-menu, .controls-dropdown")]
+    ).filter(isVisibleMenuContainer);
+
+    return containers.at(-1) ?? null;
+}
+
 function getVisibleMenuTargets(root)
 {
-    if (!(root instanceof HTMLElement)) return [];
-
-    const containers = [
-        ...root.querySelectorAll("[role='menu'], .context-menu, .dropdown-menu, .item-context-menu"),
-    ].filter(isVisibleMenuContainer);
-
-    const container = containers.at(-1);
+    const container = getVisibleMenuContainer(root);
     if (!container) return [];
 
-    return [...container.querySelectorAll("[role='menuitem'], a, button, .context-item")]
+    const contextItems = [...container.querySelectorAll(".context-item, [role='menuitem']")]
+        .filter(element => element instanceof HTMLElement);
+    const directChildren = [...container.children].filter(element => element instanceof HTMLElement);
+    const candidatePool = contextItems.length
+        ? contextItems
+        : directChildren.length
+            ? directChildren
+            : [...container.querySelectorAll("*")];
+
+    return candidatePool
         .filter(element => element instanceof HTMLElement)
         .filter(element => !element.hidden)
-        .filter(element => !element.closest("[hidden], [inert], .hidden"));
+        .filter(element => !element.closest("[hidden], [inert], .hidden"))
+        .filter(element => element !== container)
+        .filter(element => {
+            const text = element.textContent?.trim();
+            return !!text || element.matches("button, a, [role='menuitem']");
+        })
+        .map(element => {
+            if (!element.hasAttribute("tabindex") && !element.matches("button, input, select, textarea, a[href]"))
+            {
+                element.tabIndex = 0;
+            }
+            return element;
+        });
 }
 
 function focusFirstVisibleMenuTarget(root)
 {
+    const container = getVisibleMenuContainer(root);
     const targets = getVisibleMenuTargets(root);
     const firstTarget = targets[0];
-    if (!firstTarget) return false;
+    if (!firstTarget)
+    {
+        if (container)
+        {
+            if (!container.hasAttribute("tabindex")) container.tabIndex = 0;
+            container.focus({ preventScroll: false });
+            return true;
+        }
+        return false;
+    }
 
     if (!firstTarget.hasAttribute("tabindex") && !firstTarget.matches("button, input, select, textarea, a[href]"))
     {
@@ -645,7 +684,7 @@ function isKeyboardActivatableElement(element)
     if (isTextEntryElement(element)) return false;
 
     return element.matches(
-        "button, [role='button'], [role='menuitem'], a[data-action], .button, .dialog-button, .form-footer button, .form-footer a, .roll-action"
+        "button, [role='button'], [role='menuitem'], a[data-action], .button, .dialog-button, .form-footer button, .form-footer a, .roll-action, .context-item"
     );
 }
 
@@ -979,13 +1018,24 @@ function attachSheetTabHandlers(root, app)
         if (!root.contains(activeElement)) return;
         if (getTabControlFromTarget(activeElement)) return;
 
+        const menuContainer = getVisibleMenuContainer(root);
         const menuTargets = getVisibleMenuTargets(root);
-        if (menuTargets.length && (menuTargets.some(target => target === activeElement) || isLikelyInventoryMenuTrigger(activeElement)))
+        if (
+            menuTargets.length
+            && (
+                menuContainer === activeElement
+                || menuContainer?.contains(activeElement)
+                || menuTargets.some(target => target === activeElement || target.contains(activeElement))
+                || isLikelyInventoryMenuTrigger(activeElement)
+            )
+        )
         {
             const focusTargets = isLikelyInventoryMenuTrigger(activeElement)
                 ? [activeElement, ...menuTargets]
                 : menuTargets;
-            const index = focusTargets.indexOf(activeElement);
+            const currentTarget = focusTargets.find(target => target === activeElement || target.contains(activeElement))
+                ?? (menuContainer === activeElement ? focusTargets[0] : null);
+            const index = currentTarget ? focusTargets.indexOf(currentTarget) : -1;
             const nextIndex = index === -1
                 ? 0
                 : event.shiftKey
@@ -1201,6 +1251,48 @@ window.addEventListener("keydown", event =>
     if (event.ctrlKey || event.altKey || event.metaKey) return;
 
     const { app, root } = getActiveActorSheetState();
+    const menuContainer = getVisibleMenuContainer(root ?? document.body);
+    const menuTargets = getVisibleMenuTargets(root ?? document.body);
+    if (
+        menuTargets.length
+        && activeElement instanceof HTMLElement
+        && (
+            menuContainer === activeElement
+            || menuContainer?.contains(activeElement)
+            || menuTargets.some(target => target === activeElement || target.contains(activeElement))
+            || isLikelyInventoryMenuTrigger(activeElement)
+        )
+    )
+    {
+        const focusTargets = isLikelyInventoryMenuTrigger(activeElement)
+            ? [activeElement, ...menuTargets]
+            : menuTargets;
+        const currentTarget = focusTargets.find(target => target === activeElement || target.contains(activeElement))
+            ?? (menuContainer === activeElement ? focusTargets[0] : null);
+        const index = currentTarget ? focusTargets.indexOf(currentTarget) : -1;
+        const nextIndex = index === -1
+            ? 0
+            : event.shiftKey
+                ? (index - 1 + focusTargets.length) % focusTargets.length
+                : (index + 1) % focusTargets.length;
+        const nextTarget = focusTargets[nextIndex];
+
+        event.preventDefault();
+        event.stopPropagation();
+        nextTarget.focus({ preventScroll: false });
+
+        debugSheetTabs("global Tab cycled through visible menu targets", {
+            appId: app?.id,
+            fromTag: activeElement.tagName,
+            fromClasses: activeElement.className,
+            toTag: nextTarget?.tagName,
+            toClasses: nextTarget?.className,
+            shiftKey: event.shiftKey,
+            targetCount: focusTargets.length,
+        });
+        return;
+    }
+
     if (!app || !root)
     {
         debugSheetTabs("global Tab ignored: no active actor sheet", {
