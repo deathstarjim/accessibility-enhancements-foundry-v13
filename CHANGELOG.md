@@ -11,6 +11,7 @@ New features:
 - Added keyboard support for Tidy 5e item context menus so menu items can receive focus and be activated without the mouse.
 - Added automatic screen reader roll-result announcements and an `Alt+R` shortcut to re-read the latest roll result from chat.
 - Added `Enter` / `Shift+Enter` canvas token actions so the current keyboard token can open its actor sheet or be targeted without the mouse.
+- Added an `Alt+Shift+A` shortcut to open Configure Settings directly to Accessibility Enhancements and move focus into the first setting control for keyboard-only configuration.
 
 ### v0.3.1
 

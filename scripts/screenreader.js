@@ -125,6 +125,17 @@ Hooks.on("init", () =>
         },
     });
 
+    game.keybindings.register('accessibility-enhancements', 'openAccessibilitySettings', {
+        name: 'Open Accessibility Settings',
+        hint: 'Opens Configure Settings and focuses the Accessibility Enhancements settings tab.',
+        editable: [{ key: 'KeyA', modifiers: ['Alt', 'Shift'] }],
+        onDown: () =>
+        {
+            void openAccessibilitySettings();
+            return true;
+        },
+    });
+
 });
 
 // ---------------------------------------------------------------------------
@@ -287,6 +298,103 @@ function getLatestRollMessage()
         const content = message?.content ?? "";
         return typeof content === "string" && /dice-total|dice-roll|dice-result/.test(content);
     }) ?? null;
+}
+
+function getAccessibilitySettingsPanel(moduleId)
+{
+    const selectors = [
+        `.tab[data-tab="${moduleId}"]`,
+        `.settings-panel[data-tab="${moduleId}"]`,
+        `[data-application-part="tab"][data-tab="${moduleId}"]`,
+    ];
+
+    for (const selector of selectors)
+    {
+        const panel = document.querySelector(selector);
+        if (panel instanceof HTMLElement) return panel;
+    }
+
+    return null;
+}
+
+function focusFirstAccessibilitySetting(moduleId)
+{
+    const panel = getAccessibilitySettingsPanel(moduleId);
+    if (!(panel instanceof HTMLElement)) return false;
+
+    const focusSelector = [
+        "input:not([type='hidden']):not([disabled])",
+        "select:not([disabled])",
+        "textarea:not([disabled])",
+        "button:not([disabled])",
+        "[tabindex]:not([tabindex='-1'])",
+    ].join(", ");
+
+    const firstControl = [...panel.querySelectorAll(focusSelector)]
+        .find(element => element instanceof HTMLElement && !element.hidden && !element.closest("[hidden], [inert], .hidden"));
+
+    if (!(firstControl instanceof HTMLElement)) return false;
+
+    firstControl.focus({ preventScroll: false });
+    return true;
+}
+
+async function openAccessibilitySettings()
+{
+    const moduleId = "accessibility-enhancements";
+    const moduleTitle = game.modules.get(moduleId)?.title ?? "Accessibility Enhancements";
+    const SettingsConfigClass = foundry?.applications?.settings?.SettingsConfig ?? globalThis.SettingsConfig;
+
+    if (!SettingsConfigClass)
+    {
+        ui.notifications?.warn?.("Could not open Configure Settings.");
+        announceAssertive("Could not open Configure Settings.");
+        return false;
+    }
+
+    const existingApp = Object.values(ui.windows ?? {}).find(app => app instanceof SettingsConfigClass);
+    const app = existingApp ?? new SettingsConfigClass();
+    app.render(true);
+
+    let tries = 20;
+    const focusModuleTab = () =>
+    {
+        const tabButton = document.querySelector(`.settings-sidebar button[data-tab="${moduleId}"], .tabs button[data-tab="${moduleId}"]`);
+        if (tabButton instanceof HTMLElement)
+        {
+            tabButton.click();
+            requestAnimationFrame(() =>
+            {
+                requestAnimationFrame(() =>
+                {
+                    const focusedControl = focusFirstAccessibilitySetting(moduleId);
+                    if (!focusedControl) tabButton.focus({ preventScroll: false });
+                    announceAssertive(
+                        focusedControl
+                            ? `${moduleTitle} settings opened. Focus moved to the first setting.`
+                            : `${moduleTitle} settings opened.`
+                    );
+                });
+            });
+            return;
+        }
+
+        const searchInput = document.querySelector('.settings-sidebar input[type="search"], .window-content input[type="search"]');
+        if (searchInput instanceof HTMLInputElement)
+        {
+            searchInput.focus({ preventScroll: false });
+            searchInput.value = moduleTitle;
+            searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+            announceAssertive(`Configure Settings opened. Search set to ${moduleTitle}.`);
+            return;
+        }
+
+        if (--tries > 0) setTimeout(focusModuleTab, 100);
+        else announceAssertive("Configure Settings opened.");
+    };
+
+    setTimeout(focusModuleTab, 250);
+    return true;
 }
 
 function shouldAnnounceRollMessage(message, announcement)
