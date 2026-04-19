@@ -30,6 +30,7 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 
 - [x] **"Where am I" hotkey** — configurable keybind (default: `W`) that re-reads the controlled token's position, HP, and any active conditions via the assertive live region. Works on demand without any interaction.
 - [ ] **Tab through nearby tokens** — Tab/Shift-Tab to cycle through tokens on the canvas; Enter to select/control, Shift+Enter to target. Replaces needing to click tokens.
+- [ ] **Nearby token scan** — keybind announces tokens within a configurable radius of the controlled token, including distance, grid coordinate, and disposition filter (friendly, neutral, secret, hostile, or all). This gives a blind player situational awareness before choosing a target.
 - [ ] **Keyboard token targeting** — dedicated keybind to toggle targeting on the currently focused/controlled token. Avoids right-click dependency entirely.
 - [ ] **Arrow key token movement** — move a controlled token one grid square at a time using arrow keys (Foundry has partial support; ensure it works and triggers our announcements).
 - [ ] **Keyboard ruler / distance check** — announce walking distance from controlled token to the currently focused token (e.g. "Goblin Scout is 15 feet away, at B5.").
@@ -48,6 +49,7 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 ## 🪟 UI / Sheet Improvements
 
 - [ ] **Actor sheet keyboard navigation audit** — verify all interactive elements on the PF2E character sheet are reachable and operable by keyboard alone (Tab order, Enter/Space activation).
+- [ ] **Character sheet edit-mode access** — provide a keyboard-friendly way to enter and exit actor-sheet edit mode on default and Tidy 5e sheets so players can level up or change sheet data without hunting for the wrench icon.
 - [ ] **Spell/action quick-cast hotkey** — numbered hotkeys (1–9) to trigger frequently used actions from the hotbar without opening the character sheet.
 - [ ] **Compendium browser keyboard navigation** — verify Tab/Arrow/Enter work correctly in the PF2E compendium browser after our `additems.js` changes.
 - [ ] **Tooltip / description readout** — pressing a key while focused on an item/spell/feat reads the full description text via the polite live region.

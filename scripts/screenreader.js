@@ -76,6 +76,26 @@ Hooks.on("init", () =>
         onChange: () => { },
     });
 
+    game.settings.register('accessibility-enhancements', 'announceHpChanges', {
+        name: 'Announce HP / Damage Changes',
+        hint: 'Screen reader announces damage, healing, and temporary HP changes for owned actors.',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false,
+        onChange: () => { },
+    });
+
+    game.settings.register('accessibility-enhancements', 'announceConditions', {
+        name: 'Announce Status Effects / Conditions',
+        hint: 'Screen reader announces when conditions or active effects are applied to or removed from owned actors.',
+        scope: 'client',
+        config: true,
+        type: Boolean,
+        default: false,
+        onChange: () => { },
+    });
+
     game.keybindings.register('accessibility-enhancements', 'whereAmI', {
         name: 'Where Am I — Read Position & Status',
         hint: "Announces the controlled token's grid position, HP, and active conditions via the screen reader.",
@@ -209,6 +229,8 @@ globalThis.AEAnnounce = {
 };
 
 const AE_ANNOUNCED_ROLL_MESSAGES = new Map();
+const AE_PREUPDATE_HP = new Map();
+const AE_CONDITION_ANNOUNCEMENT_CACHE = new Map();
 
 function getRenderedApplicationRoot(html)
 {
@@ -233,12 +255,254 @@ function getSpeakerName(message)
     return message.speaker?.alias || message.author?.name || game.i18n.localize("Unknown");
 }
 
+function isOwnedActor(actor)
+{
+    return !!actor?.isOwner;
+}
+
+function hasHpChange(changes)
+{
+    if (!changes) return false;
+    if (foundry.utils.hasProperty(changes, "system.attributes.hp")) return true;
+
+    const flattened = foundry.utils.flattenObject(changes);
+    return Object.keys(flattened).some(key => key.startsWith("system.attributes.hp."));
+}
+
+function getHpData(actor)
+{
+    const hp = actor?.system?.attributes?.hp;
+    if (!hp) return null;
+
+    return {
+        value: Number(hp.value ?? 0),
+        max: Number(hp.max ?? 0),
+        temp: Number(hp.temp ?? 0),
+        tempmax: Number(hp.tempmax ?? 0),
+    };
+}
+
+function formatCurrentHp(actor)
+{
+    const hp = getHpData(actor);
+    if (!hp || !hp.max) return null;
+
+    const parts = [`HP ${hp.value} of ${hp.max}`];
+    if (hp.temp > 0) parts.push(`${hp.temp} temporary HP`);
+    return parts.join(". ");
+}
+
+function getHpChangeAnnouncement(actor, previousHp, currentHp)
+{
+    if (!previousHp || !currentHp) return null;
+
+    const name = actor?.name ?? "Actor";
+    const hpSummary = formatCurrentHp(actor);
+    const announcements = [];
+
+    const hpDelta = currentHp.value - previousHp.value;
+    if (hpDelta < 0)
+    {
+        announcements.push(`${name} takes ${Math.abs(hpDelta)} damage.`);
+    } else if (hpDelta > 0)
+    {
+        announcements.push(`${name} regains ${hpDelta} hit points.`);
+    }
+
+    const tempDelta = currentHp.temp - previousHp.temp;
+    if (tempDelta < 0)
+    {
+        announcements.push(`${name} loses ${Math.abs(tempDelta)} temporary hit points.`);
+    } else if (tempDelta > 0)
+    {
+        announcements.push(`${name} gains ${tempDelta} temporary hit points.`);
+    }
+
+    if (!announcements.length) return null;
+    if (hpSummary) announcements.push(`${hpSummary}.`);
+
+    return announcements.join(" ");
+}
+
+function getConditionLabel(document)
+{
+    if (!document) return "";
+
+    return document.name
+        || document.label
+        || document.getFlag?.("core", "statusId")
+        || "";
+}
+
+function isConditionLikeDocument(document)
+{
+    if (!document) return false;
+
+    if (document.documentName === "ActiveEffect") return true;
+    if (document.documentName === "Item" && document.type === "condition") return true;
+
+    return false;
+}
+
+function shouldAnnounceConditionEvent(key)
+{
+    const now = Date.now();
+    const previous = AE_CONDITION_ANNOUNCEMENT_CACHE.get(key);
+    if (previous && (now - previous) < 500) return false;
+
+    AE_CONDITION_ANNOUNCEMENT_CACHE.set(key, now);
+    if (AE_CONDITION_ANNOUNCEMENT_CACHE.size > 200)
+    {
+        const oldestKey = AE_CONDITION_ANNOUNCEMENT_CACHE.keys().next().value;
+        if (oldestKey) AE_CONDITION_ANNOUNCEMENT_CACHE.delete(oldestKey);
+    }
+
+    return true;
+}
+
+function announceConditionChange(document, action)
+{
+    if (!game.settings.get('accessibility-enhancements', 'announceConditions')) return;
+    if (!isConditionLikeDocument(document)) return;
+
+    const actor = document.parent?.documentName === "Actor" ? document.parent : null;
+    if (!isOwnedActor(actor)) return;
+
+    const conditionName = getConditionLabel(document);
+    if (!conditionName) return;
+
+    const cacheKey = `${action}:${actor.id}:${conditionName}`;
+    if (!shouldAnnounceConditionEvent(cacheKey)) return;
+
+    announcePolite(`${conditionName} ${action} ${actor.name}.`);
+}
+
 function getChatMessageAnnouncement(message)
 {
     const speaker = getSpeakerName(message);
     const content = normalizeAnnouncementText(stripHtmlToText(message.content ?? ""));
     if (!content) return null;
     return `${speaker}: ${content}`;
+}
+
+function getUniqueNormalizedTexts(elements, options = {})
+{
+    const {
+        minLength = 1,
+        excludedTexts = [],
+    } = options;
+
+    const excluded = new Set(excludedTexts.map(text => normalizeAnnouncementText(text).toLowerCase()));
+    const results = [];
+
+    for (const element of elements ?? [])
+    {
+        if (!(element instanceof HTMLElement)) continue;
+        const text = normalizeAnnouncementText(element.textContent);
+        if (!text || text.length < minLength) continue;
+        if (excluded.has(text.toLowerCase())) continue;
+        if (!results.includes(text)) results.push(text);
+    }
+
+    return results;
+}
+
+function getChatCardTargets(root)
+{
+    if (!(root instanceof HTMLElement)) return [];
+
+    const rows = root.querySelectorAll([
+        ".card-tray.targets-tray .target",
+        ".targets .target",
+        ".targets li",
+        "damage-application .targets .target",
+        "damage-application .targets li",
+        ".damage-tray .targets .target",
+        ".damage-tray .targets li",
+        ".targeted .target",
+        ".targeted li",
+        "[data-application-part='targets'] .target",
+        "[data-application-part='targets'] li",
+        ".damage-application .target",
+        ".damage-application li",
+    ].join(", "));
+
+    const targets = [];
+
+    for (const row of rows)
+    {
+        if (!(row instanceof HTMLElement)) continue;
+
+        const namedElements = row.querySelectorAll(".name, .name-stacked, .name-stacked .title, .target-name, .actor-name, .token-name, strong, .label, .title");
+        const names = getUniqueNormalizedTexts(namedElements, {
+            minLength: 2,
+            excludedTexts: ["targets", "targeted", "selected", "apply"],
+        });
+
+        if (names.length)
+        {
+            for (const name of names)
+            {
+                if (!targets.includes(name)) targets.push(name);
+            }
+            continue;
+        }
+
+        const rowText = normalizeAnnouncementText(row.textContent);
+        if (!rowText) continue;
+        if (/^(targets|targeted|selected|apply)$/i.test(rowText)) continue;
+        if (/^-?\d+$/.test(rowText)) continue;
+        if (!targets.includes(rowText)) targets.push(rowText);
+    }
+
+    return targets;
+}
+
+function getAppliedDamageSummary(root)
+{
+    if (!(root instanceof HTMLElement)) return null;
+
+    const rows = root.querySelectorAll([
+        "damage-application .targets .target",
+        "damage-application .targets li",
+        ".damage-tray .targets .target",
+        ".damage-tray .targets li",
+        ".targets .target",
+        ".targets li",
+        ".damage-application .target",
+        ".damage-application li",
+        "[data-application-part='targets'] .target",
+        "[data-application-part='targets'] li",
+    ].join(", "));
+
+    const results = [];
+
+    for (const row of rows)
+    {
+        if (!(row instanceof HTMLElement)) continue;
+
+        const name = getUniqueNormalizedTexts(
+            row.querySelectorAll(".name, .name-stacked, .name-stacked .title, .target-name, .actor-name, .token-name, strong, .label, .title"),
+            {
+                minLength: 2,
+                excludedTexts: ["targets", "targeted", "selected", "apply"],
+            }
+        )[0];
+
+        const valueElement = row.querySelector(".value, .damage, .delta, .change");
+        const valueText = normalizeAnnouncementText(valueElement?.textContent ?? row.textContent ?? "");
+        const signedMatch = valueText.match(/-\d+/);
+        const numericMatch = signedMatch ?? valueText.match(/\b\d+\b/);
+        if (!name || !numericMatch) continue;
+
+        const amount = Math.abs(Number(numericMatch[0]));
+        if (!Number.isFinite(amount)) continue;
+
+        results.push(`${name} ${amount} damage`);
+    }
+
+    if (!results.length) return null;
+    return results.join(", ");
 }
 
 function getRollAnnouncement(message, root)
@@ -282,6 +546,12 @@ function getRollAnnouncement(message, root)
     {
         parts.push(`Totals ${totals.join(", ")}.`);
     }
+
+    const targets = getChatCardTargets(root);
+    if (targets.length) parts.push(`Targets ${targets.join(", ")}.`);
+
+    const appliedDamage = getAppliedDamageSummary(root);
+    if (appliedDamage) parts.push(`Applied ${appliedDamage}.`);
 
     return parts.join(". ").replace(/\.\s+\./g, ". ");
 }
@@ -522,6 +792,51 @@ Hooks.on("renderChatMessageHTML", (message, html) =>
     if (!(message.isRoll || message.rolls?.length || root.querySelector(".dice-roll, .dice-result, .dice-total"))) return;
 
     announceRollResult(message, root);
+});
+
+Hooks.on("preUpdateActor", (actor, changes) =>
+{
+    if (!game.settings.get('accessibility-enhancements', 'announceHpChanges')) return;
+    if (!isOwnedActor(actor)) return;
+    if (!hasHpChange(changes)) return;
+
+    const hp = getHpData(actor);
+    if (!hp) return;
+    AE_PREUPDATE_HP.set(actor.id, hp);
+});
+
+Hooks.on("updateActor", (actor, changes) =>
+{
+    if (!game.settings.get('accessibility-enhancements', 'announceHpChanges')) return;
+    if (!isOwnedActor(actor)) return;
+    if (!hasHpChange(changes)) return;
+
+    const previousHp = AE_PREUPDATE_HP.get(actor.id);
+    AE_PREUPDATE_HP.delete(actor.id);
+
+    const currentHp = getHpData(actor);
+    const announcement = getHpChangeAnnouncement(actor, previousHp, currentHp);
+    if (announcement) announcePolite(announcement);
+});
+
+Hooks.on("createActiveEffect", effect =>
+{
+    announceConditionChange(effect, "applied to");
+});
+
+Hooks.on("deleteActiveEffect", effect =>
+{
+    announceConditionChange(effect, "removed from");
+});
+
+Hooks.on("createItem", item =>
+{
+    announceConditionChange(item, "applied to");
+});
+
+Hooks.on("deleteItem", item =>
+{
+    announceConditionChange(item, "removed from");
 });
 
 // ---------------------------------------------------------------------------
