@@ -100,6 +100,31 @@ Hooks.on("init", () =>
         },
     });
 
+    game.keybindings.register('accessibility-enhancements', 'readLastRollResult', {
+        name: 'Read Last Roll Result',
+        hint: 'Announces the most recent roll result from chat.',
+        editable: [{ key: 'KeyR', modifiers: ['Alt'] }],
+        onDown: () =>
+        {
+            const message = getLatestRollMessage();
+            if (!message)
+            {
+                announceAssertive("No recent roll result found in chat.");
+                return true;
+            }
+
+            const announcement = getRollAnnouncement(message) || getChatMessageAnnouncement(message);
+            if (!announcement)
+            {
+                announceAssertive("Could not read the latest roll result.");
+                return true;
+            }
+
+            announceAssertive(announcement);
+            return true;
+        },
+    });
+
 });
 
 // ---------------------------------------------------------------------------
@@ -197,6 +222,14 @@ function getSpeakerName(message)
     return message.speaker?.alias || message.author?.name || game.i18n.localize("Unknown");
 }
 
+function getChatMessageAnnouncement(message)
+{
+    const speaker = getSpeakerName(message);
+    const content = normalizeAnnouncementText(stripHtmlToText(message.content ?? ""));
+    if (!content) return null;
+    return `${speaker}: ${content}`;
+}
+
 function getRollAnnouncement(message, root)
 {
     const speaker = getSpeakerName(message);
@@ -240,6 +273,20 @@ function getRollAnnouncement(message, root)
     }
 
     return parts.join(". ").replace(/\.\s+\./g, ". ");
+}
+
+function getLatestRollMessage()
+{
+    const messages = game.messages?.contents;
+    if (!Array.isArray(messages)) return null;
+
+    return [...messages].reverse().find(message =>
+    {
+        if (message?.isRoll || message?.rolls?.length) return true;
+
+        const content = message?.content ?? "";
+        return typeof content === "string" && /dice-total|dice-roll|dice-result/.test(content);
+    }) ?? null;
 }
 
 function shouldAnnounceRollMessage(message, announcement)
@@ -347,11 +394,8 @@ Hooks.on("createChatMessage", (message) =>
     }
 
     if (!game.settings.get('accessibility-enhancements', 'announceChatMessages')) return;
-
-    const speaker = getSpeakerName(message);
-    const content = stripHtmlToText(message.content ?? "");
-
-    if (content) announcePolite(`${speaker}: ${content}`);
+    const announcement = getChatMessageAnnouncement(message);
+    if (announcement) announcePolite(announcement);
 });
 
 Hooks.on("updateChatMessage", (message, changed) =>

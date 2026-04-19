@@ -9,6 +9,8 @@ New features:
 - Added spoken screen reader guidance when keyboard focus enters a character sheet.
 - Added keyboard activation for common row actions on Tidy 5e inventory and spell rows, including use/roll buttons, item and spell action buttons, and roll configuration dialogs.
 - Added keyboard support for Tidy 5e item context menus so menu items can receive focus and be activated without the mouse.
+- Added automatic screen reader roll-result announcements and an `Alt+R` shortcut to re-read the latest roll result from chat.
+- Added `Enter` / `Shift+Enter` canvas token actions so the current keyboard token can open its actor sheet or be targeted without the mouse.
 
 ### v0.3.1
 

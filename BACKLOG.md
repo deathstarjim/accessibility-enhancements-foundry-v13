@@ -17,11 +17,11 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 ## 📢 Screen Reader Announcements (canvas / combat)
 *Builds on the ARIA live region system already in `screenreader.js`.*
 
-- [x] **Token move** — announce name + new grid coordinate when any owned token moves (e.g. "Thorin moves to C3").
+- [X] **Token move** — announce name + new grid coordinate when any owned token moves (e.g. "Thorin moves to C3").
 - [x] **Token enter/leave scene** — announce when a token is added to or removed from the canvas (e.g. "Goblin King has entered the scene.").
 - [ ] **HP / damage changes** — announce damage or healing on owned (and optionally targeted) tokens (e.g. "Thorin takes 8 damage. 22 of 30 HP remaining.").
 - [ ] **Status effects / conditions** — announce when a condition is applied to or removed from an owned token (e.g. "Prone applied to Thorin." / "Frightened 1 removed.").
-- [ ] **Dice roll results** — announce the result and total of any roll in the chat (e.g. "Attack roll: 17.").
+- [x] **Dice roll results** — announce the result and total of any roll in the chat (e.g. "Attack roll: 17."). Includes an `Alt+R` fallback to re-read the latest roll result from chat on demand.
 
 ---
 
