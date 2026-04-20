@@ -29,6 +29,7 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 *Reducing the need for click-and-drag is the highest-value area for Michael.*
 
 - [x] **"Where am I" hotkey** — configurable keybind (default: `W`) that re-reads the controlled token's position, HP, and any active conditions via the assertive live region. Works on demand without any interaction.
+- [ ] **Initial token selection / open sheet flow** — provide a keyboard-first way on initial world load to find owned tokens, select/control one, and open its character sheet without needing a mouse or pre-existing canvas focus.
 - [ ] **Tab through nearby tokens** — Tab/Shift-Tab to cycle through tokens on the canvas; Enter to select/control, Shift+Enter to target. Replaces needing to click tokens.
 - [ ] **Nearby token scan** — keybind announces tokens within a configurable radius of the controlled token, including distance, grid coordinate, and disposition filter (friendly, neutral, secret, hostile, or all). This gives a blind player situational awareness before choosing a target.
 - [ ] **Keyboard token targeting** — dedicated keybind to toggle targeting on the currently focused/controlled token. Avoids right-click dependency entirely.
@@ -61,6 +62,7 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 - [ ] **System-agnostic HP hook** — the HP announcement currently needs PF2E-specific attribute paths. Investigate a generic approach that works for any system (D&D 5e, PF2E, SWADE, etc.).
 - [ ] **Setting profile / preset** — a single "Enable all screen reader features" toggle that turns on all the announcement settings at once, for ease of onboarding Michael.
 - [x] **Accessibility settings shortcut** — dedicated hotkey opens Configure Settings to the Accessibility Enhancements module and moves focus into the first setting control so settings can be changed without hunting through the full settings UI.
+- [ ] **Sidebar pin / default-open option** — add a client setting to keep the right sidebar expanded by default, with a pin-style option so it stays open until the player explicitly closes it.
 - [ ] **Keyboard shortcut reference sheet** — in-game pop-up (hotkey: `?` or `F1`) listing all accessibility keybindings added by this module.
 - [ ] **CHANGELOG / release workflow** — update `workflows/release.yml` and `CHANGELOG.md` for v0.4.0 and future releases.
 

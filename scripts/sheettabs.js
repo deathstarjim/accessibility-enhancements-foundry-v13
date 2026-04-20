@@ -14,7 +14,8 @@ const AE_SHEET_TABS_STATE = {
     activeApp: null,
     activeRoot: null,
     pendingAttack: null,
-    pendingDamageApplication: null,
+    pendingRollApplication: null,
+    pendingConsumableApplication: null,
     lastAttackControl: null,
     lastAttackControlDescriptor: null,
 };
@@ -692,6 +693,12 @@ function getInventoryUsableActivity(element, app)
     return activities.filter(activity => activity?.canUse)?.[0] ?? null;
 }
 
+function isConsumableItemControl(element, app)
+{
+    const item = getInventoryItemDocument(element, app);
+    return item?.type === "consumable";
+}
+
 function getSceneActorToken(app)
 {
     const actor = app?.document?.documentName === "Actor"
@@ -779,6 +786,54 @@ function getAttackTargetCandidates(app)
         });
 
     return candidates;
+}
+
+function getActivityTargetCandidates(app, { preferSelf = false } = {})
+{
+    if (!canvas?.tokens?.placeables?.length) return [];
+
+    const sourceToken = getSceneActorToken(app);
+    return canvas.tokens.placeables
+        .filter(token => token?.document && token.actor)
+        .filter(token => !token.document.hidden)
+        .map(token =>
+        {
+            const disposition = getTokenDispositionLabel(sourceToken, token);
+            const distance = getTokenDistance(sourceToken, token);
+            const isSelf = !!sourceToken && token.id === sourceToken.id;
+
+            let sortOrder = 0;
+            if (preferSelf)
+            {
+                sortOrder = isSelf
+                    ? 0
+                    : disposition === "ally"
+                        ? 1
+                        : disposition === "neutral"
+                            ? 2
+                            : 3;
+            }
+            else
+            {
+                sortOrder = disposition === "enemy"
+                    ? 0
+                    : disposition === "ally"
+                        ? 1
+                        : disposition === "neutral"
+                            ? 2
+                            : 3;
+            }
+
+            return { token, disposition, distance, sortOrder };
+        })
+        .sort((left, right) =>
+        {
+            if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
+            const leftDistance = Number.isFinite(left.distance) ? left.distance : Number.POSITIVE_INFINITY;
+            const rightDistance = Number.isFinite(right.distance) ? right.distance : Number.POSITIVE_INFINITY;
+            if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+            return (left.token.name ?? "").localeCompare(right.token.name ?? "");
+        });
 }
 
 function clearUserTargets()
@@ -905,7 +960,7 @@ function showAccessibleTargetPicker({ app, itemName, candidates })
 async function chooseAttackTarget(app, element)
 {
     const itemName = getInventoryRowName(getInventoryRowElement(element));
-    const candidates = getAttackTargetCandidates(app);
+    const candidates = getActivityTargetCandidates(app);
 
     if (!candidates.length)
     {
@@ -939,6 +994,49 @@ async function chooseAttackTarget(app, element)
         itemName,
         targetId: selectedToken.id,
         targetName: selectedToken.name,
+    });
+    return true;
+}
+
+async function chooseConsumableTarget(app, element)
+{
+    const itemName = getInventoryRowName(getInventoryRowElement(element));
+    const candidates = getActivityTargetCandidates(app, { preferSelf: true });
+    const usableActivity = getInventoryUsableActivity(element, app);
+
+    if (!candidates.length)
+    {
+        debugSheetTabs("consumable target picker skipped: no candidates", {
+            appId: app?.id,
+            itemName,
+        });
+        return true;
+    }
+
+    const selectedToken = await showAccessibleTargetPicker({ app, itemName, candidates });
+    if (!selectedToken)
+    {
+        debugSheetTabs("consumable target picker cancelled", {
+            appId: app?.id,
+            itemName,
+        });
+        return false;
+    }
+
+    setSingleUserTarget(selectedToken);
+    await waitForTargetRegistration(selectedToken);
+    stageConsumableTargetApplication({
+        app,
+        activity: usableActivity,
+        targetToken: selectedToken,
+        itemName,
+    });
+    debugSheetTabs("consumable target selected", {
+        appId: app?.id,
+        itemName,
+        targetId: selectedToken.id,
+        targetName: selectedToken.name,
+        activityType: usableActivity?.type,
     });
     return true;
 }
@@ -1119,6 +1217,7 @@ function triggerRollDialogFromActivity(activity, originatingApp = null, event = 
     {
         if (typeof activity?.rollDamage === "function")
         {
+            promoteConsumableTargetToRollApplication(activity);
             void activity.rollDamage({ event });
             debugSheetTabs("triggered heal roll dialog directly from usage dialog", {
                 activityType: activity.type,
@@ -1245,41 +1344,127 @@ function getRollTotalValue(roll)
     return NaN;
 }
 
-function restoreLastAttackControlFocus()
+function stageConsumableTargetApplication({ app, activity, targetToken, itemName })
 {
-    const control = AE_SHEET_TABS_STATE.lastAttackControl;
-    let target = control instanceof HTMLElement && document.contains(control) ? control : null;
+    AE_SHEET_TABS_STATE.pendingConsumableApplication = {
+        app,
+        activity,
+        targetToken,
+        itemName,
+    };
+}
 
-    if (!target)
+function activitiesReferToSameThing(left, right)
+{
+    if (!left || !right) return false;
+    if (left === right) return true;
+    if (left.uuid && right.uuid && left.uuid === right.uuid) return true;
+
+    return !!(
+        left.id
+        && right.id
+        && left.id === right.id
+        && left.type === right.type
+        && left.item?.id === right.item?.id
+    );
+}
+
+function setPendingRollApplication({ activity, targetToken, itemName })
+{
+    AE_SHEET_TABS_STATE.pendingRollApplication = {
+        activity,
+        targetToken,
+        itemName,
+    };
+}
+
+function promoteConsumableTargetToRollApplication(activity)
+{
+    const pendingConsumable = AE_SHEET_TABS_STATE.pendingConsumableApplication;
+    const pendingActivity = pendingConsumable?.activity;
+    const sameActivity = !pendingActivity || activitiesReferToSameThing(pendingActivity, activity);
+
+    if (pendingConsumable?.targetToken && sameActivity)
     {
-        const descriptor = AE_SHEET_TABS_STATE.lastAttackControlDescriptor;
-        const root = AE_SHEET_TABS_STATE.activeRoot;
-        if (descriptor && root instanceof HTMLElement)
-        {
-            const row = descriptor.itemId
-                ? root.querySelector(`[data-item-id="${CSS.escape(descriptor.itemId)}"]`)
-                : null;
-
-            if (row instanceof HTMLElement)
-            {
-                target = row.querySelector(descriptor.selector ?? "") ?? row.querySelector(".item-name, .item-action, .rollable, button, a");
-            }
-        }
+        setPendingRollApplication({
+            activity,
+            targetToken: pendingConsumable.targetToken,
+            itemName: pendingConsumable.itemName ?? activity.item?.name ?? "",
+        });
+        debugSheetTabs("promoted consumable target to pending roll application", {
+            itemName: pendingConsumable.itemName ?? activity.item?.name,
+            targetName: pendingConsumable.targetToken.name,
+            activityType: activity.type,
+        });
+        return true;
     }
 
-    if (!(target instanceof HTMLElement)) return;
+    debugSheetTabs("failed to promote consumable target before healing roll", {
+        pendingItemName: pendingConsumable?.itemName,
+        pendingTargetName: pendingConsumable?.targetToken?.name,
+        pendingActivityId: pendingActivity?.id,
+        pendingActivityUuid: pendingActivity?.uuid,
+        pendingActivityType: pendingActivity?.type,
+        currentActivityId: activity?.id,
+        currentActivityUuid: activity?.uuid,
+        currentActivityType: activity?.type,
+        currentItemId: activity?.item?.id,
+    });
+    return false;
+}
+
+function restoreLastAttackControlFocus()
+{
+    let tries = 10;
+
+    const resolveTarget = () =>
+    {
+        const control = AE_SHEET_TABS_STATE.lastAttackControl;
+        if (control instanceof HTMLElement && document.contains(control)) return control;
+
+        const descriptor = AE_SHEET_TABS_STATE.lastAttackControlDescriptor;
+        const root = AE_SHEET_TABS_STATE.activeRoot;
+        if (!(descriptor && root instanceof HTMLElement)) return null;
+
+        const row = descriptor.itemId
+            ? root.querySelector(`[data-item-id="${CSS.escape(descriptor.itemId)}"]`)
+            : null;
+        if (!(row instanceof HTMLElement)) return null;
+
+        return row.querySelector(descriptor.selector ?? "")
+            ?? row.querySelector(".item-name, .item-action, .rollable, button, a");
+    };
+
+    const attemptRestore = () =>
+    {
+        const root = AE_SHEET_TABS_STATE.activeRoot;
+        const app = AE_SHEET_TABS_STATE.activeApp;
+        const target = resolveTarget();
+        if (!(target instanceof HTMLElement))
+        {
+            if (--tries > 0) setTimeout(attemptRestore, 75);
+            return;
+        }
+
+        if (app && root instanceof HTMLElement) setActiveActorSheet(app, root);
+        target.focus({ preventScroll: false });
+
+        if (document.activeElement !== target && --tries > 0)
+        {
+            setTimeout(attemptRestore, 75);
+            return;
+        }
+
+        debugSheetTabs("restored focus to last attack control", {
+            tag: target.tagName,
+            classes: target.className,
+            text: target.textContent?.trim()?.slice(0, 80),
+        });
+    };
 
     requestAnimationFrame(() =>
     {
-        requestAnimationFrame(() =>
-        {
-            target.focus({ preventScroll: false });
-            debugSheetTabs("restored focus to last attack control", {
-                tag: target.tagName,
-                classes: target.className,
-                text: target.textContent?.trim()?.slice(0, 80),
-            });
-        });
+        requestAnimationFrame(attemptRestore);
     });
 }
 
@@ -1376,11 +1561,11 @@ function openAttackResultDialog({ activity, targetToken, hit, rollTotal })
             dialog.close("roll-damage");
             if (typeof activity?.rollDamage === "function")
             {
-                AE_SHEET_TABS_STATE.pendingDamageApplication = {
+                setPendingRollApplication({
                     activity,
                     targetToken,
                     itemName: activity?.item?.name ?? "",
-                };
+                });
                 void activity.rollDamage({});
                 focusActivationResult(previousWindowIds, AE_SHEET_TABS_STATE.activeApp);
                 debugSheetTabs("attack result dialog triggered damage roll", {
@@ -1424,6 +1609,11 @@ async function activateInventoryControl(element, app, event)
         }
         else if (usableActivity?.use)
         {
+            if (isConsumableItemControl(element, app))
+            {
+                const targetChosen = await chooseConsumableTarget(app, element);
+                if (!targetChosen) return;
+            }
             const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
             void usableActivity.use({ event }, { options: { sheet: app } });
             focusActivationResult(previousWindowIds, app);
@@ -1455,6 +1645,11 @@ async function activateInventoryControl(element, app, event)
         && (element.matches(".item-name, .item-action, .rollable, [data-action='use']") || element.closest(".item-name, .item-action, .rollable, [data-action='use']"))
     )
     {
+        if (isConsumableItemControl(element, app))
+        {
+            const targetChosen = await chooseConsumableTarget(app, element);
+            if (!targetChosen) return;
+        }
         const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
         void usableActivity.use({ event }, { options: { sheet: app } });
         focusActivationResult(previousWindowIds, app);
@@ -2441,19 +2636,44 @@ Hooks.on("dnd5e.postRollAttack", (rolls, data = {}) =>
     AE_SHEET_TABS_STATE.pendingAttack = null;
 });
 
-Hooks.on("dnd5e.rollDamage", async (rolls, data = {}) =>
+async function handleRollDamageHook(rolls, data = {}, hookName = "dnd5e.rollDamage")
 {
-    const pending = AE_SHEET_TABS_STATE.pendingDamageApplication;
+    const pending = AE_SHEET_TABS_STATE.pendingRollApplication;
+    debugSheetTabs("received damage roll hook", {
+        hookName,
+        hasPending: !!pending,
+        pendingItemName: pending?.itemName,
+        pendingTargetName: pending?.targetToken?.name,
+        subjectType: data?.subject?.type,
+        subjectItemName: data?.subject?.item?.name,
+    });
+
     if (!pending?.targetToken?.actor) return;
-    if (pending.activity && data.subject && pending.activity !== data.subject) return;
+    if (pending.activity && data.subject && pending.activity !== data.subject)
+    {
+        debugSheetTabs("ignored damage roll hook due to subject mismatch", {
+            hookName,
+            pendingItemName: pending.itemName,
+            pendingActivityType: pending.activity?.type,
+            subjectType: data.subject?.type,
+            subjectItemName: data.subject?.item?.name,
+        });
+        return;
+    }
 
     const roll = Array.isArray(rolls) ? rolls[0] : null;
     const damageTotal = getRollTotalValue(roll);
+    const rollType = roll?.parent?.flags?.dnd5e?.roll?.type;
+    const isHealingRoll = rollType === "healing" || data?.subject?.type === "heal";
+    const appliedAmount = isHealingRoll ? -Math.abs(damageTotal) : damageTotal;
     debugSheetTabs("damage roll payload snapshot", {
         itemName: pending.itemName,
         targetName: pending.targetToken.name,
         rollCount: Array.isArray(rolls) ? rolls.length : 0,
         damageTotal,
+        appliedAmount,
+        rollType,
+        isHealingRoll,
         rollSummary: roll
             ? {
                 constructorName: roll.constructor?.name,
@@ -2466,19 +2686,23 @@ Hooks.on("dnd5e.rollDamage", async (rolls, data = {}) =>
     });
     if (!Number.isFinite(damageTotal)) return;
 
-    AE_SHEET_TABS_STATE.pendingDamageApplication = null;
+    AE_SHEET_TABS_STATE.pendingRollApplication = null;
+    AE_SHEET_TABS_STATE.pendingConsumableApplication = null;
 
     try
     {
-        await pending.targetToken.actor.applyDamage(damageTotal, {
+        await pending.targetToken.actor.applyDamage(appliedAmount, {
             isDelta: true,
             originatingMessage: roll?.parent ?? null,
         });
 
-        debugSheetTabs("applied damage to selected target", {
+        debugSheetTabs("applied roll result to selected target", {
             itemName: pending.itemName,
             targetName: pending.targetToken.name,
             damageTotal,
+            appliedAmount,
+            rollType,
+            isHealingRoll,
         });
         restoreLastAttackControlFocus();
     }
@@ -2492,4 +2716,7 @@ Hooks.on("dnd5e.rollDamage", async (rolls, data = {}) =>
         });
         restoreLastAttackControlFocus();
     }
-});
+}
+
+Hooks.on("dnd5e.rollDamage", (rolls, data = {}) => void handleRollDamageHook(rolls, data, "dnd5e.rollDamage"));
+Hooks.on("dnd5e.rollDamageV2", (rolls, data = {}) => void handleRollDamageHook(rolls, data, "dnd5e.rollDamageV2"));
