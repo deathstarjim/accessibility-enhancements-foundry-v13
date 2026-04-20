@@ -212,6 +212,13 @@ const AE_SHEET_ADAPTERS = [
             '.adjustment-button',
             '.items-header',
             '.item-header',
+            '.midi-info-icon',
+            '[data-action="toggleExpand"]',
+            '.activity-row',
+            '.activity-row .item-name',
+            '.activity-row .item-control',
+            '.midi-activity-buttons button',
+            '[data-midi-action]',
             '.item-detail.item-quantity input',
             '.item-detail.item-quantity',
             '.item-detail.item-price',
@@ -283,7 +290,6 @@ function announceSheetTabsHint(app)
 function isActorSheetApplication(app, root)
 {
     const result = app?.document?.documentName === "Actor"
-        || app?.actor?.documentName === "Actor"
         || root?.matches?.(".actor")
         || root?.querySelector?.(".actor-tabs, nav.tabs[data-group]");
 
@@ -525,6 +531,21 @@ function getCurrentPanelKeyboardTarget(targets, activeElement)
     return targets.find(target => target === activeElement || target.contains(activeElement)) ?? null;
 }
 
+function getFocusedSheetPanel(root, activeElement)
+{
+    if (!(root instanceof HTMLElement)) return null;
+    if (!(activeElement instanceof HTMLElement)) return null;
+
+    const focusedPanel = activeElement.closest(".tab[data-tab], [role='tabpanel']");
+    if (focusedPanel instanceof HTMLElement && root.contains(focusedPanel)) return focusedPanel;
+
+    const activeTab = getActiveTabControl(root);
+    const activePanel = activeTab ? findTabPanel(root, activeTab) : null;
+    if (activePanel instanceof HTMLElement) return activePanel;
+
+    return null;
+}
+
 function getInitialSheetFocusTarget(root, reverse = false)
 {
     const activeTab = getActiveTabControl(root);
@@ -658,33 +679,99 @@ function getInventoryAttackActivity(element, app)
     return activities.filter(activity => activity?.type === "attack" && activity?.canUse)?.[0] ?? null;
 }
 
+function getInventoryUsableActivity(element, app)
+{
+    const item = getInventoryItemDocument(element, app);
+    const activities = item?.system?.activities;
+    if (!activities?.filter) return null;
+
+    return activities.filter(activity => activity?.canUse)?.[0] ?? null;
+}
+
 function getFirstInteractiveDescendant(root)
 {
     if (!(root instanceof HTMLElement)) return null;
 
-    const selector = [
-        "[data-midi-action]",
-        ".dialog-button",
-        ".roll-link-group",
-        ".roll-action",
-        "button",
-        "a[href]",
-        "a[data-action]",
-        "[role='button']",
-        "input",
-        "select",
-        "textarea",
-        "[tabindex]:not([tabindex='-1'])",
-    ].join(", ");
+    const selectorGroups = root.matches(".activity-usage, dialog.activity-usage")
+        ? [
+            [
+                '.form-footer [data-action="use"]',
+                '.form-footer button',
+                '.window-content [data-action="use"]',
+                '.window-content button',
+            ].join(", "),
+            [
+                "dnd5e-checkbox",
+                "input",
+                "select",
+                "textarea",
+            ].join(", "),
+            [
+                "[data-midi-action]",
+                ".dialog-button",
+                ".roll-link-group",
+                ".roll-action",
+                "button",
+                "a[href]",
+                "a[data-action]",
+                "[role='button']",
+                "[tabindex]:not([tabindex='-1'])",
+            ].join(", "),
+        ]
+        : root.matches("dialog, .application")
+            ? [
+                [
+                    '.form-footer [data-action]',
+                    '.form-footer button',
+                    'footer [data-action]',
+                    'footer button',
+                    '.window-content [data-action]',
+                    '.window-content button',
+                    '.window-content .dialog-button',
+                ].join(", "),
+                [
+                    "input",
+                    "select",
+                    "textarea",
+                    "dnd5e-checkbox",
+                    "[role='button']",
+                    "[tabindex]:not([tabindex='-1'])",
+                ].join(", "),
+                [
+                    "[data-midi-action]",
+                    ".roll-link-group",
+                    ".roll-action",
+                    "button",
+                    "a[href]",
+                    "a[data-action]",
+                ].join(", "),
+            ]
+            : [[
+                "[data-midi-action]",
+                ".dialog-button",
+                ".roll-link-group",
+                ".roll-action",
+                "button",
+                "a[href]",
+                "a[data-action]",
+                "[role='button']",
+                "input",
+                "select",
+                "textarea",
+                "[tabindex]:not([tabindex='-1'])",
+            ].join(", ")];
 
-    for (const element of root.querySelectorAll(selector))
+    for (const selector of selectorGroups)
     {
-        if (!isRenderedElement(element)) continue;
-        if (!element.hasAttribute("tabindex") && !element.matches("button, input, select, textarea, a[href]"))
+        for (const element of root.querySelectorAll(selector))
         {
-            element.tabIndex = 0;
+            if (!isRenderedElement(element)) continue;
+            if (!element.hasAttribute("tabindex") && !element.matches("button, input, select, textarea, a[href]"))
+            {
+                element.tabIndex = 0;
+            }
+            return element;
         }
-        return element;
     }
 
     return null;
@@ -697,21 +784,54 @@ function getLatestChatMessageElement()
     return latest instanceof HTMLElement ? latest : null;
 }
 
-function focusInventoryActivationResult(app, previousWindowId, previousChatMessage)
+function getVisibleApplicationElements()
+{
+    return [...document.querySelectorAll("dialog.application, .window-app, .application")]
+        .filter(element => element instanceof HTMLElement)
+        .filter(element => isRenderedElement(element));
+}
+
+function getApplicationIdentity(element)
+{
+    if (!(element instanceof HTMLElement)) return "";
+    return element.id || `${element.tagName}:${element.className}`;
+}
+
+function focusActivationResult(previousWindowIds, previousChatMessage, originatingApp = null)
 {
     let tries = 12;
 
     const attemptFocus = () =>
     {
+        const newWindow = getVisibleApplicationElements().find(element =>
+        {
+            const id = getApplicationIdentity(element);
+            return id && !previousWindowIds.has(id);
+        });
+        if (newWindow)
+        {
+            const windowTarget = getFirstInteractiveDescendant(newWindow);
+            if (windowTarget)
+            {
+                windowTarget.focus({ preventScroll: false });
+                debugSheetTabs("focused activation new window target", {
+                    sourceWindowId: getApplicationIdentity(newWindow),
+                    targetTag: windowTarget.tagName,
+                    targetClasses: windowTarget.className,
+                });
+                return;
+            }
+        }
+
         const activeWindow = ui?.activeWindow;
-        if (activeWindow && activeWindow.id !== previousWindowId && activeWindow !== app)
+        if (activeWindow && activeWindow !== originatingApp && !previousWindowIds.has(activeWindow.id))
         {
             const windowRoot = getApplicationElement(activeWindow, activeWindow?.element);
             const windowTarget = getFirstInteractiveDescendant(windowRoot);
             if (windowTarget)
             {
                 windowTarget.focus({ preventScroll: false });
-                debugSheetTabs("focused inventory activation window target", {
+                debugSheetTabs("focused activation window target", {
                     sourceWindowId: activeWindow.id,
                     sourceWindowClass: activeWindow.constructor?.name,
                     targetTag: windowTarget.tagName,
@@ -728,7 +848,7 @@ function focusInventoryActivationResult(app, previousWindowId, previousChatMessa
             if (chatTarget)
             {
                 chatTarget.focus({ preventScroll: false });
-                debugSheetTabs("focused inventory activation chat target", {
+                debugSheetTabs("focused activation chat target", {
                     messageId: latestChatMessage.dataset?.messageId,
                     targetTag: chatTarget.tagName,
                     targetClasses: chatTarget.className,
@@ -743,24 +863,53 @@ function focusInventoryActivationResult(app, previousWindowId, previousChatMessa
     setTimeout(attemptFocus, 50);
 }
 
+function triggerRollDialogFromActivity(previousChatMessage, activity, originatingApp = null, event = null)
+{
+    let tries = 12;
+    const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
+
+    const attemptRoll = () =>
+    {
+        if (typeof activity?.rollDamage === "function")
+        {
+            void activity.rollDamage({ event });
+            debugSheetTabs("triggered heal roll dialog directly from usage dialog", {
+                activityType: activity.type,
+                itemName: activity.item?.name,
+            });
+            focusActivationResult(previousWindowIds, previousChatMessage, originatingApp);
+            return;
+        }
+
+        if (--tries > 0) setTimeout(attemptRoll, 100);
+    };
+
+    setTimeout(attemptRoll, 50);
+}
+
 async function activateInventoryControl(element, app, event)
 {
     if (!(element instanceof HTMLElement)) return;
-    const previousWindowId = ui?.activeWindow?.id ?? null;
+    const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
     const previousChatMessage = getLatestChatMessageElement();
     const attackActivity = getInventoryAttackActivity(element, app);
+    const usableActivity = getInventoryUsableActivity(element, app);
 
     if (element.matches(".tidy-table-row-use-button"))
     {
         if (attackActivity?.rollAttack)
         {
-            await attackActivity.rollAttack({ event });
+            void attackActivity.rollAttack({ event });
+        }
+        else if (usableActivity?.use)
+        {
+            void usableActivity.use({ event }, { options: { sheet: app } });
         }
         else
         {
             element.click();
         }
-        focusInventoryActivationResult(app, previousWindowId, previousChatMessage);
+        focusActivationResult(previousWindowIds, previousChatMessage, app);
         return;
     }
 
@@ -775,14 +924,21 @@ async function activateInventoryControl(element, app, event)
         && (element.matches(".item-name, .item-action, .rollable, [data-action='use']") || element.closest(".item-name, .item-action, .rollable, [data-action='use']"))
     )
     {
-        await attackActivity.rollAttack({ event });
+        void attackActivity.rollAttack({ event });
+    }
+    else if (
+        usableActivity?.use
+        && (element.matches(".item-name, .item-action, .rollable, [data-action='use']") || element.closest(".item-name, .item-action, .rollable, [data-action='use']"))
+    )
+    {
+        void usableActivity.use({ event }, { options: { sheet: app } });
     }
     else
     {
         element.click();
     }
 
-    focusInventoryActivationResult(app, previousWindowId, previousChatMessage);
+    focusActivationResult(previousWindowIds, previousChatMessage, app);
 }
 
 function getInventoryControlLabel(element)
@@ -1345,13 +1501,16 @@ function attachSheetTabHandlers(root, app)
         }
 
         const activeTab = getActiveTabControl(root);
-        const activePanel = activeTab ? findTabPanel(root, activeTab) : null;
+        const activePanel = getFocusedSheetPanel(root, activeElement);
         if (!activePanel || !activePanel.contains(activeElement)) return;
 
         const adapter = getSheetAdapter(app, root);
         const targets = getPanelKeyboardTargets(activePanel, adapter);
-        const index = targets.indexOf(activeElement);
-        if (index === -1 || !targets.length) return;
+        if (!targets.length) return;
+
+        const currentTarget = getCurrentPanelKeyboardTarget(targets, activeElement);
+        const index = currentTarget ? targets.indexOf(currentTarget) : -1;
+        if (index === -1) return;
 
         const nextIndex = event.shiftKey
             ? (index - 1 + targets.length) % targets.length
@@ -1362,17 +1521,17 @@ function attachSheetTabHandlers(root, app)
         event.stopPropagation();
         nextTarget.focus({ preventScroll: false });
 
-        debugSheetTabs("panel Tab cycled between panel targets", {
-            appId: app?.id,
-            adapter: adapter.id,
-            activeTabId: getTabId(activeTab),
-            fromTag: activeElement.tagName,
-            fromClasses: activeElement.className,
-            toTag: nextTarget?.tagName,
-            toClasses: nextTarget?.className,
-            shiftKey: event.shiftKey,
-            targetCount: targets.length,
-        });
+            debugSheetTabs("panel Tab cycled between panel targets", {
+                appId: app?.id,
+                adapter: adapter.id,
+                activeTabId: getTabId(activeTab),
+                fromTag: currentTarget?.tagName ?? activeElement.tagName,
+                fromClasses: currentTarget?.className ?? activeElement.className,
+                toTag: nextTarget?.tagName,
+                toClasses: nextTarget?.className,
+                shiftKey: event.shiftKey,
+                targetCount: targets.length,
+            });
     }, true);
 
     root.addEventListener("click", event =>
@@ -1499,6 +1658,9 @@ window.addEventListener("keydown", event =>
     )
     {
         const { root } = getActiveActorSheetState();
+        const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
+        const previousChatMessage = getLatestChatMessageElement();
+        const activeWindowBeforeClick = ui?.activeWindow ?? null;
         if (
             activeElement instanceof HTMLElement
             && root instanceof HTMLElement
@@ -1520,6 +1682,18 @@ window.addEventListener("keydown", event =>
         event.preventDefault();
         event.stopPropagation();
         activeElement.click();
+        if (
+            activeElement instanceof HTMLElement
+            && activeElement.matches(".activity-usage [data-action='use'], dialog.activity-usage [data-action='use'], .application.activity-usage [data-action='use']")
+        )
+        {
+            focusActivationResult(previousWindowIds, previousChatMessage, activeWindowBeforeClick);
+            const activity = activeWindowBeforeClick?.activity;
+            if (activity?.type === "heal")
+            {
+                triggerRollDialogFromActivity(previousChatMessage, activity, activeWindowBeforeClick, event);
+            }
+        }
 
         debugSheetTabs("global keyboard activation clicked focused control", {
             key: event.key,
@@ -1602,7 +1776,7 @@ window.addEventListener("keydown", event =>
     if (app && root && activeElement instanceof HTMLElement && root.contains(activeElement) && !isTextEntryElement(activeElement))
     {
         const activeTab = getActiveTabControl(root);
-        const activePanel = activeTab ? findTabPanel(root, activeTab) : null;
+        const activePanel = getFocusedSheetPanel(root, activeElement);
         if (activePanel && activePanel.contains(activeElement))
         {
             const adapter = getSheetAdapter(app, root);
