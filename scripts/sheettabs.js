@@ -165,18 +165,65 @@ const AE_SHEET_ADAPTERS = [
     {
         id: "dnd5e-default",
         matches: (app, root) => app?.document?.documentName === "Actor",
+        useWholePanelForTargets: true,
         entrySelectors: [
+            'li.item[data-item-id] .item-name.item-action.rollable',
+            'li.item[data-item-id] .activity-name.item-name.item-action.rollable',
+            'li.item[data-item-id] .item-control[data-action="equip"]',
+            'li.item[data-item-id] .item-control[data-action="toggleExpand"]',
+            'li.item[data-item-id] .item-control[data-context-menu]',
+            'li.item[data-item-id] .item-toggle',
             '.skill-name',
             '.saving-throw',
             '.ability-check',
+            '.item-name',
+            '.item-action',
+            '.item-control',
+            '.rollable',
+            '[data-action="roll"]',
+            '[data-action]',
+            'button',
+            'a',
         ],
         panelTargetSelectors: [
+            'li.item[data-item-id] .item-name.item-action.rollable',
+            'li.item[data-item-id] .activity-name.item-name.item-action.rollable',
+            'li.item[data-item-id] .item-control[data-action="equip"]',
+            'li.item[data-item-id] .item-control[data-action="toggleExpand"]',
+            'li.item[data-item-id] .item-control[data-context-menu]',
+            'li.item[data-item-id] .item-toggle',
             '.skill-name',
             '.saving-throw',
             '.ability-check',
             '.item-control',
             '.item-action',
             '.item-name',
+            '.rollable',
+            '[data-action="roll"]',
+            '[data-action]',
+            'button',
+            'a',
+            'input',
+            'select',
+            'textarea',
+        ],
+        excludedPanelTargetSelectors: [
+            '.filter-control',
+            '.adjustment-button',
+            '.item-detail.item-quantity input',
+            '.item-detail.item-quantity',
+            '.item-detail.item-price',
+            '.item-detail.item-weight',
+            '.item-detail.item-roll',
+            '.item-detail.item-formula',
+            '.item-detail.item-uses',
+            '.pills-group',
+            '.pills-group .pill',
+            '.pills-group .label',
+            '.pills-group h3',
+            '.items-header',
+            '.items-section > .item-name',
+            '.inventory-element > .item-name',
         ],
     },
 ];
@@ -393,6 +440,12 @@ function getPanelKeyboardTargets(panel, adapter)
     }
 
     return targets;
+}
+
+function getCurrentPanelKeyboardTarget(targets, activeElement)
+{
+    if (!(activeElement instanceof HTMLElement)) return null;
+    return targets.find(target => target === activeElement || target.contains(activeElement)) ?? null;
 }
 
 function getInitialSheetFocusTarget(root, reverse = false)
@@ -1217,6 +1270,7 @@ window.addEventListener("keydown", event =>
         && !event.ctrlKey
         && !event.altKey
         && !event.metaKey
+        && !getTabControlFromTarget(activeElement)
         && isKeyboardActivatableElement(activeElement)
     )
     {
@@ -1302,6 +1356,56 @@ window.addEventListener("keydown", event =>
         return;
     }
 
+    if (app && root && activeElement instanceof HTMLElement && root.contains(activeElement) && !isTextEntryElement(activeElement))
+    {
+        const activeTab = getActiveTabControl(root);
+        const activePanel = activeTab ? findTabPanel(root, activeTab) : null;
+        if (activePanel && activePanel.contains(activeElement))
+        {
+            const adapter = getSheetAdapter(app, root);
+            const targets = getPanelKeyboardTargets(activePanel, adapter);
+            if (targets.length)
+            {
+                const currentTarget = getCurrentPanelKeyboardTarget(targets, activeElement);
+                const index = currentTarget ? targets.indexOf(currentTarget) : -1;
+                const nextIndex = index === -1
+                    ? (event.shiftKey ? targets.length - 1 : 0)
+                    : event.shiftKey
+                        ? (index - 1 + targets.length) % targets.length
+                        : (index + 1) % targets.length;
+                const nextTarget = targets[nextIndex];
+
+                event.preventDefault();
+                event.stopPropagation();
+                nextTarget.focus({ preventScroll: false });
+
+                debugSheetTabs("global Tab cycled between panel targets", {
+                    appId: app?.id,
+                    adapter: adapter.id,
+                    activeTabId: getTabId(activeTab),
+                    fromTag: activeElement.tagName,
+                    fromClasses: activeElement.className,
+                    toTag: nextTarget?.tagName,
+                    toClasses: nextTarget?.className,
+                    shiftKey: event.shiftKey,
+                    targetCount: targets.length,
+                });
+                return;
+            }
+        }
+    }
+
+    if (app && root && root.contains(activeElement))
+    {
+        debugSheetTabs("global Tab ignored: focus already inside sheet after panel checks", {
+            appId: app?.id,
+            activeElementTag: activeElement?.tagName,
+            activeElementClasses: activeElement?.className,
+        });
+        if (!isTextEntryElement(activeElement)) setActiveActorSheet(app, root);
+        return;
+    }
+
     if (!app || !root)
     {
         debugSheetTabs("global Tab ignored: no active actor sheet", {
@@ -1321,17 +1425,6 @@ window.addEventListener("keydown", event =>
             otherWindowClasses: otherWindow?.className,
             activeElementTag: activeElement?.tagName,
         });
-        return;
-    }
-
-    if (root.contains(activeElement))
-    {
-        debugSheetTabs("global Tab ignored: focus already inside sheet", {
-            appId: app?.id,
-            activeElementTag: activeElement?.tagName,
-            activeElementClasses: activeElement?.className,
-        });
-        if (!isTextEntryElement(activeElement)) setActiveActorSheet(app, root);
         return;
     }
 
