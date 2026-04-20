@@ -13,6 +13,9 @@ function getApplicationElement(app, html)
 const AE_SHEET_TABS_STATE = {
     activeApp: null,
     activeRoot: null,
+    pendingAttack: null,
+    pendingDamageApplication: null,
+    lastAttackControl: null,
 };
 
 const AE_SHEET_TABS_DEBUG = true;
@@ -688,9 +691,275 @@ function getInventoryUsableActivity(element, app)
     return activities.filter(activity => activity?.canUse)?.[0] ?? null;
 }
 
+function getSceneActorToken(app)
+{
+    const actor = app?.document?.documentName === "Actor"
+        ? app.document
+        : app?.actor?.documentName === "Actor"
+            ? app.actor
+            : null;
+    if (!actor || !canvas?.tokens?.placeables) return null;
+
+    return canvas.tokens.controlled.find(token => token?.actor?.id === actor.id)
+        ?? canvas.tokens.placeables.find(token => token?.actor?.id === actor.id && (token.isOwner || token.actor?.isOwner))
+        ?? actor.getActiveTokens?.(true, true)?.[0]
+        ?? null;
+}
+
+function getTokenDispositionLabel(sourceToken, candidateToken)
+{
+    if (!candidateToken) return "unknown";
+    if (sourceToken && candidateToken.id === sourceToken.id) return "self";
+
+    const sourceDisposition = Number(sourceToken?.document?.disposition ?? 0);
+    const candidateDisposition = Number(candidateToken?.document?.disposition ?? 0);
+
+    if (candidateDisposition === 0 || sourceDisposition === 0) return "neutral";
+    return sourceDisposition === candidateDisposition ? "ally" : "enemy";
+}
+
+function getTokenDistance(sourceToken, candidateToken)
+{
+    if (!sourceToken || !candidateToken) return null;
+
+    try
+    {
+        if (typeof canvas?.grid?.measurePath === "function")
+        {
+            const measurement = canvas.grid.measurePath([sourceToken.center, candidateToken.center]);
+            const distance = Number(measurement?.distance);
+            return Number.isFinite(distance) ? distance : null;
+        }
+    }
+    catch
+    {
+        // Fall through to a simple center-to-center estimate below.
+    }
+
+    const sourceCenter = sourceToken.center;
+    const candidateCenter = candidateToken.center;
+    if (!sourceCenter || !candidateCenter) return null;
+
+    const dx = Number(candidateCenter.x) - Number(sourceCenter.x);
+    const dy = Number(candidateCenter.y) - Number(sourceCenter.y);
+    const pixels = Math.hypot(dx, dy);
+    const size = Number(canvas?.grid?.size) || 100;
+    const distancePerGrid = Number(canvas?.scene?.grid?.distance) || 5;
+    return Number.isFinite(pixels) ? Math.round((pixels / size) * distancePerGrid) : null;
+}
+
+function getAttackTargetCandidates(app)
+{
+    if (!canvas?.tokens?.placeables?.length) return [];
+
+    const sourceToken = getSceneActorToken(app);
+    const candidates = canvas.tokens.placeables
+        .filter(token => token?.document && token.actor)
+        .filter(token => !token.document.hidden)
+        .map(token => ({
+            token,
+            disposition: getTokenDispositionLabel(sourceToken, token),
+            distance: getTokenDistance(sourceToken, token),
+            sortOrder: getTokenDispositionLabel(sourceToken, token) === "enemy"
+                ? 0
+                : getTokenDispositionLabel(sourceToken, token) === "ally"
+                    ? 1
+                    : getTokenDispositionLabel(sourceToken, token) === "neutral"
+                        ? 2
+                        : 3,
+        }))
+        .sort((left, right) =>
+        {
+            if (left.sortOrder !== right.sortOrder) return left.sortOrder - right.sortOrder;
+            const leftDistance = Number.isFinite(left.distance) ? left.distance : Number.POSITIVE_INFINITY;
+            const rightDistance = Number.isFinite(right.distance) ? right.distance : Number.POSITIVE_INFINITY;
+            if (leftDistance !== rightDistance) return leftDistance - rightDistance;
+            return (left.token.name ?? "").localeCompare(right.token.name ?? "");
+        });
+
+    return candidates;
+}
+
+function clearUserTargets()
+{
+    for (const token of game.user?.targets ?? [])
+    {
+        token?.setTarget?.(false, { releaseOthers: false, user: game.user, groupSelection: false });
+    }
+}
+
+function setSingleUserTarget(token)
+{
+    if (!token) return false;
+
+    clearUserTargets();
+    token.setTarget?.(true, { releaseOthers: true, user: game.user, groupSelection: false });
+    return true;
+}
+
+async function waitForTargetRegistration(token, tries = 8)
+{
+    if (!token) return;
+
+    while (tries-- > 0)
+    {
+        if (game.user?.targets?.has(token)) return;
+        await new Promise(resolve => setTimeout(resolve, 25));
+    }
+}
+
+function showAccessibleTargetPicker({ app, itemName, candidates })
+{
+    return new Promise(resolve =>
+    {
+        const dialog = document.createElement("dialog");
+        dialog.className = "application ae-target-picker";
+        dialog.setAttribute("aria-label", itemName ? `Choose target for ${itemName}` : "Choose target");
+
+        const candidateMarkup = candidates.map((candidate, index) =>
+        {
+            const checked = index === 0 ? ' checked="checked"' : "";
+            const safeName = foundry.utils.escapeHTML(candidate.token.name ?? "Unknown");
+            const safeDisposition = foundry.utils.escapeHTML(candidate.disposition);
+            const distanceText = Number.isFinite(candidate.distance)
+                ? `${Math.round(candidate.distance)} ft`
+                : "distance unknown";
+            return `
+                <label class="ae-target-picker__option">
+                    <input type="radio" name="ae-target-choice" value="${candidate.token.id}"${checked}>
+                    <span>${safeName}, ${safeDisposition}, ${foundry.utils.escapeHTML(distanceText)}</span>
+                </label>
+            `;
+        }).join("");
+
+        dialog.innerHTML = `
+            <header class="window-header">
+                <h1 class="window-title">Choose Target</h1>
+                <button type="button" class="header-control icon fa-solid fa-xmark" data-action="close" aria-label="Close Window"></button>
+            </header>
+            <form class="window-content standard-form ae-target-picker__form" method="dialog">
+                <p>Select one target for ${foundry.utils.escapeHTML(itemName || "this attack")}.</p>
+                <fieldset class="ae-target-picker__list">
+                    ${candidateMarkup}
+                </fieldset>
+                <footer class="form-footer">
+                    <button type="submit" value="continue" class="default">Continue</button>
+                    <button type="button" data-action="cancel">Cancel</button>
+                </footer>
+            </form>
+        `;
+
+        const cleanup = result =>
+        {
+            dialog.remove();
+            resolve(result);
+        };
+
+        dialog.addEventListener("close", () =>
+        {
+            if (dialog.dataset.aeResolved === "true") return;
+            dialog.dataset.aeResolved = "true";
+
+            if (dialog.returnValue !== "continue")
+            {
+                cleanup(null);
+                return;
+            }
+
+            const selectedId = dialog.querySelector('input[name="ae-target-choice"]:checked')?.value;
+            const selected = candidates.find(candidate => candidate.token.id === selectedId)?.token ?? null;
+            cleanup(selected);
+        });
+
+        dialog.querySelector('[data-action="close"]')?.addEventListener("click", () => dialog.close("cancel"));
+        dialog.querySelector('[data-action="cancel"]')?.addEventListener("click", () => dialog.close("cancel"));
+        dialog.addEventListener("cancel", event =>
+        {
+            event.preventDefault();
+            dialog.close("cancel");
+        });
+
+        document.body.append(dialog);
+        dialog.showModal();
+
+        requestAnimationFrame(() =>
+        {
+            const firstChoice = dialog.querySelector('input[name="ae-target-choice"]');
+            if (firstChoice instanceof HTMLElement) firstChoice.focus({ preventScroll: false });
+        });
+
+        debugSheetTabs("opened accessible target picker", {
+            appId: app?.id,
+            itemName,
+            candidateCount: candidates.length,
+            candidates: candidates.map(candidate => ({
+                tokenId: candidate.token.id,
+                tokenName: candidate.token.name,
+                disposition: candidate.disposition,
+            })),
+        });
+    });
+}
+
+async function chooseAttackTarget(app, element)
+{
+    const itemName = getInventoryRowName(getInventoryRowElement(element));
+    const candidates = getAttackTargetCandidates(app);
+
+    if (!candidates.length)
+    {
+        debugSheetTabs("attack target picker skipped: no candidates", {
+            appId: app?.id,
+            itemName,
+        });
+        return true;
+    }
+
+    const selectedToken = await showAccessibleTargetPicker({ app, itemName, candidates });
+    if (!selectedToken)
+    {
+        debugSheetTabs("attack target picker cancelled", {
+            appId: app?.id,
+            itemName,
+        });
+        return false;
+    }
+
+    setSingleUserTarget(selectedToken);
+    await waitForTargetRegistration(selectedToken);
+    AE_SHEET_TABS_STATE.pendingAttack = {
+        app,
+        activity: getInventoryAttackActivity(element, app),
+        targetToken: selectedToken,
+        itemName,
+    };
+    debugSheetTabs("attack target selected", {
+        appId: app?.id,
+        itemName,
+        targetId: selectedToken.id,
+        targetName: selectedToken.name,
+    });
+    return true;
+}
+
 function getFirstInteractiveDescendant(root)
 {
     if (!(root instanceof HTMLElement)) return null;
+
+    if (root.matches("dialog, .application"))
+    {
+        const titleText = root.querySelector(".window-title")?.textContent?.trim()?.toLowerCase?.() ?? "";
+        if (titleText === "attack roll" || titleText === "damage roll" || titleText === "healing roll")
+        {
+            const normalButton = [...root.querySelectorAll("button")]
+                .find(button => isRenderedElement(button) && /normal/i.test(button.textContent ?? ""));
+            if (normalButton instanceof HTMLElement)
+            {
+                if (!normalButton.hasAttribute("tabindex")) normalButton.tabIndex = 0;
+                return normalButton;
+            }
+        }
+    }
 
     const selectorGroups = root.matches(".activity-usage, dialog.activity-usage")
         ? [
@@ -777,13 +1046,6 @@ function getFirstInteractiveDescendant(root)
     return null;
 }
 
-function getLatestChatMessageElement()
-{
-    const messages = document.querySelectorAll("#chat-log .message, #chat-log .chat-message, .chat-message");
-    const latest = messages[messages.length - 1];
-    return latest instanceof HTMLElement ? latest : null;
-}
-
 function getVisibleApplicationElements()
 {
     return [...document.querySelectorAll("dialog.application, .window-app, .application")]
@@ -797,7 +1059,7 @@ function getApplicationIdentity(element)
     return element.id || `${element.tagName}:${element.className}`;
 }
 
-function focusActivationResult(previousWindowIds, previousChatMessage, originatingApp = null)
+function focusActivationResult(previousWindowIds, originatingApp = null)
 {
     let tries = 12;
 
@@ -841,29 +1103,13 @@ function focusActivationResult(previousWindowIds, previousChatMessage, originati
             }
         }
 
-        const latestChatMessage = getLatestChatMessageElement();
-        if (latestChatMessage && latestChatMessage !== previousChatMessage)
-        {
-            const chatTarget = getFirstInteractiveDescendant(latestChatMessage);
-            if (chatTarget)
-            {
-                chatTarget.focus({ preventScroll: false });
-                debugSheetTabs("focused activation chat target", {
-                    messageId: latestChatMessage.dataset?.messageId,
-                    targetTag: chatTarget.tagName,
-                    targetClasses: chatTarget.className,
-                });
-                return;
-            }
-        }
-
         if (--tries > 0) setTimeout(attemptFocus, 100);
     };
 
     setTimeout(attemptFocus, 50);
 }
 
-function triggerRollDialogFromActivity(previousChatMessage, activity, originatingApp = null, event = null)
+function triggerRollDialogFromActivity(activity, originatingApp = null, event = null)
 {
     let tries = 12;
     const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
@@ -877,7 +1123,7 @@ function triggerRollDialogFromActivity(previousChatMessage, activity, originatin
                 activityType: activity.type,
                 itemName: activity.item?.name,
             });
-            focusActivationResult(previousWindowIds, previousChatMessage, originatingApp);
+            focusActivationResult(previousWindowIds, originatingApp);
             return;
         }
 
@@ -887,11 +1133,243 @@ function triggerRollDialogFromActivity(previousChatMessage, activity, originatin
     setTimeout(attemptRoll, 50);
 }
 
+function triggerAttackActivityFlow(activity, app, event)
+{
+    const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
+
+    if (typeof activity?.use === "function")
+    {
+        void activity.use({ event }, { options: { sheet: app } }).then(results =>
+        {
+            debugSheetTabs("triggered attack activity use flow", {
+                activityType: activity?.type,
+                itemName: activity?.item?.name,
+                messageId: results?.message?.id,
+            });
+
+            // Preserve the richer usage card/target metadata, then manually kick off the
+            // roll dialog if no module/system path opened it for us.
+            let tries = 8;
+            const attemptAttackRoll = () =>
+            {
+                const newWindow = getVisibleApplicationElements().find(element =>
+                {
+                    const id = getApplicationIdentity(element);
+                    return id && !previousWindowIds.has(id);
+                });
+
+                if (newWindow)
+                {
+                    focusActivationResult(previousWindowIds, app);
+                    return;
+                }
+
+                const activeWindow = ui?.activeWindow;
+                const activeWindowId = activeWindow?.id;
+                const activeWindowRoot = activeWindow
+                    ? getApplicationElement(activeWindow, activeWindow?.element)
+                    : null;
+                const activeWindowVisible = activeWindowRoot instanceof HTMLElement
+                    && document.contains(activeWindowRoot)
+                    && isRenderedElement(activeWindowRoot);
+                const hasNewActiveWindow = activeWindow
+                    && activeWindow !== app
+                    && activeWindowId
+                    && activeWindowVisible
+                    && !previousWindowIds.has(activeWindowId);
+
+                if ((tries-- > 0) && hasNewActiveWindow)
+                {
+                    focusActivationResult(previousWindowIds, app);
+                    return;
+                }
+
+                if (tries <= 0 && typeof activity?.rollAttack === "function")
+                {
+                    const attackWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
+                    void activity.rollAttack(
+                        { event },
+                        {},
+                        { data: { "flags.dnd5e.originatingMessage": results?.message?.id } }
+                    );
+                    debugSheetTabs("triggered attack roll after activity use flow", {
+                        activityType: activity?.type,
+                        itemName: activity?.item?.name,
+                        messageId: results?.message?.id,
+                    });
+                    focusActivationResult(attackWindowIds, app);
+                    return;
+                }
+
+                setTimeout(attemptAttackRoll, 75);
+            };
+
+            setTimeout(attemptAttackRoll, 75);
+        });
+        return true;
+    }
+
+    if (typeof activity?.rollAttack === "function")
+    {
+        void activity.rollAttack({ event });
+        debugSheetTabs("triggered attack roll fallback flow", {
+            activityType: activity?.type,
+            itemName: activity?.item?.name,
+        });
+        focusActivationResult(previousWindowIds, app);
+        return true;
+    }
+
+    return false;
+}
+
+function getTargetArmorClass(token)
+{
+    return Number(token?.actor?.system?.attributes?.ac?.value ?? token?.actor?.system?.attributes?.ac?.flat ?? NaN);
+}
+
+function getRollTotalValue(roll)
+{
+    if (!roll) return NaN;
+
+    const directTotal = Number(roll.total);
+    if (Number.isFinite(directTotal)) return directTotal;
+
+    const resultTotal = Number(roll.result?.total);
+    if (Number.isFinite(resultTotal)) return resultTotal;
+
+    const termsTotal = Number(roll._total);
+    if (Number.isFinite(termsTotal)) return termsTotal;
+
+    return NaN;
+}
+
+function restoreLastAttackControlFocus()
+{
+    const control = AE_SHEET_TABS_STATE.lastAttackControl;
+    if (!(control instanceof HTMLElement)) return;
+    if (!document.contains(control)) return;
+
+    requestAnimationFrame(() =>
+    {
+        requestAnimationFrame(() =>
+        {
+            control.focus({ preventScroll: false });
+            debugSheetTabs("restored focus to last attack control", {
+                tag: control.tagName,
+                classes: control.className,
+                text: control.textContent?.trim()?.slice(0, 80),
+            });
+        });
+    });
+}
+
+function focusDialogControl(dialog, selector)
+{
+    if (!(dialog instanceof HTMLElement)) return;
+
+    let tries = 8;
+    const attemptFocus = () =>
+    {
+        if (!document.contains(dialog)) return;
+
+        dialog.focus?.({ preventScroll: true });
+        const target = dialog.querySelector(selector);
+        if (target instanceof HTMLElement)
+        {
+            target.focus({ preventScroll: false });
+            if (document.activeElement === target) return;
+        }
+
+        if (--tries > 0) setTimeout(attemptFocus, 50);
+    };
+
+    requestAnimationFrame(() =>
+    {
+        requestAnimationFrame(attemptFocus);
+    });
+}
+
+function openAttackResultDialog({ activity, targetToken, hit, rollTotal })
+{
+    const targetName = targetToken?.name ?? "Target";
+    const ac = getTargetArmorClass(targetToken);
+    const dialog = document.createElement("dialog");
+    dialog.className = "application ae-attack-result";
+    dialog.setAttribute("aria-label", hit ? `Hit ${targetName}` : `Missed ${targetName}`);
+
+    const summary = hit
+        ? `Hit ${foundry.utils.escapeHTML(targetName)} with ${rollTotal} against AC ${Number.isFinite(ac) ? ac : "unknown"}.`
+        : `Missed ${foundry.utils.escapeHTML(targetName)} with ${rollTotal} against AC ${Number.isFinite(ac) ? ac : "unknown"}.`;
+
+    dialog.innerHTML = `
+        <header class="window-header">
+            <h1 class="window-title">${hit ? "Attack Hit" : "Attack Missed"}</h1>
+            <button type="button" class="header-control icon fa-solid fa-xmark" data-action="close" aria-label="Close Window"></button>
+        </header>
+        <form class="window-content standard-form" method="dialog">
+            <p>${summary}</p>
+            <footer class="form-footer">
+                ${hit ? '<button type="button" class="default" data-action="roll-damage" autofocus>Roll Damage</button>' : ""}
+                <button type="button" data-action="close"${hit ? "" : " autofocus"}>${hit ? "Cancel" : "Close"}</button>
+            </footer>
+        </form>
+    `;
+
+    const close = () => dialog.close("close");
+
+    for (const button of dialog.querySelectorAll('[data-action="close"]'))
+    {
+        button.addEventListener("click", close);
+    }
+    dialog.addEventListener("cancel", event =>
+    {
+        event.preventDefault();
+        close();
+    });
+
+    if (hit)
+    {
+        dialog.querySelector('[data-action="roll-damage"]')?.addEventListener("click", () =>
+        {
+            const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
+            dialog.close("roll-damage");
+            if (typeof activity?.rollDamage === "function")
+            {
+                AE_SHEET_TABS_STATE.pendingDamageApplication = {
+                    activity,
+                    targetToken,
+                    itemName: activity?.item?.name ?? "",
+                };
+                void activity.rollDamage({});
+                focusActivationResult(previousWindowIds, AE_SHEET_TABS_STATE.activeApp);
+                debugSheetTabs("attack result dialog triggered damage roll", {
+                    itemName: activity?.item?.name,
+                    targetName,
+                });
+            }
+        });
+    }
+
+    dialog.addEventListener("close", () =>
+    {
+        dialog.remove();
+        if (!hit) restoreLastAttackControlFocus();
+    });
+    document.body.append(dialog);
+    dialog.showModal();
+    focusDialogControl(
+        dialog,
+        hit
+            ? '.form-footer [data-action="roll-damage"]'
+            : '.form-footer [data-action="close"]'
+    );
+}
+
 async function activateInventoryControl(element, app, event)
 {
     if (!(element instanceof HTMLElement)) return;
-    const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
-    const previousChatMessage = getLatestChatMessageElement();
+    AE_SHEET_TABS_STATE.lastAttackControl = element;
     const attackActivity = getInventoryAttackActivity(element, app);
     const usableActivity = getInventoryUsableActivity(element, app);
 
@@ -899,17 +1377,20 @@ async function activateInventoryControl(element, app, event)
     {
         if (attackActivity?.rollAttack)
         {
-            void attackActivity.rollAttack({ event });
+            const targetChosen = await chooseAttackTarget(app, element);
+            if (!targetChosen) return;
+            if (triggerAttackActivityFlow(attackActivity, app, event)) return;
         }
         else if (usableActivity?.use)
         {
+            const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
             void usableActivity.use({ event }, { options: { sheet: app } });
+            focusActivationResult(previousWindowIds, app);
         }
         else
         {
             element.click();
         }
-        focusActivationResult(previousWindowIds, previousChatMessage, app);
         return;
     }
 
@@ -924,21 +1405,23 @@ async function activateInventoryControl(element, app, event)
         && (element.matches(".item-name, .item-action, .rollable, [data-action='use']") || element.closest(".item-name, .item-action, .rollable, [data-action='use']"))
     )
     {
-        void attackActivity.rollAttack({ event });
+        const targetChosen = await chooseAttackTarget(app, element);
+        if (!targetChosen) return;
+        if (triggerAttackActivityFlow(attackActivity, app, event)) return;
     }
     else if (
         usableActivity?.use
         && (element.matches(".item-name, .item-action, .rollable, [data-action='use']") || element.closest(".item-name, .item-action, .rollable, [data-action='use']"))
     )
     {
+        const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
         void usableActivity.use({ event }, { options: { sheet: app } });
+        focusActivationResult(previousWindowIds, app);
     }
     else
     {
         element.click();
     }
-
-    focusActivationResult(previousWindowIds, previousChatMessage, app);
 }
 
 function getInventoryControlLabel(element)
@@ -1659,7 +2142,6 @@ window.addEventListener("keydown", event =>
     {
         const { root } = getActiveActorSheetState();
         const previousWindowIds = new Set(getVisibleApplicationElements().map(getApplicationIdentity).filter(Boolean));
-        const previousChatMessage = getLatestChatMessageElement();
         const activeWindowBeforeClick = ui?.activeWindow ?? null;
         if (
             activeElement instanceof HTMLElement
@@ -1687,11 +2169,11 @@ window.addEventListener("keydown", event =>
             && activeElement.matches(".activity-usage [data-action='use'], dialog.activity-usage [data-action='use'], .application.activity-usage [data-action='use']")
         )
         {
-            focusActivationResult(previousWindowIds, previousChatMessage, activeWindowBeforeClick);
+            focusActivationResult(previousWindowIds, activeWindowBeforeClick);
             const activity = activeWindowBeforeClick?.activity;
             if (activity?.type === "heal")
             {
-                triggerRollDialogFromActivity(previousChatMessage, activity, activeWindowBeforeClick, event);
+                triggerRollDialogFromActivity(activity, activeWindowBeforeClick, event);
             }
         }
 
@@ -1887,4 +2369,86 @@ Hooks.on("closeApplicationV2", app =>
 
     clearActiveActorSheet("closeApplicationV2");
     AE_SHEET_HINTS_ANNOUNCED.delete(app?.id);
+});
+
+Hooks.on("dnd5e.postRollAttack", (rolls, data = {}) =>
+{
+    const pending = AE_SHEET_TABS_STATE.pendingAttack;
+    if (!pending?.targetToken) return;
+    if (pending.activity && data.subject && pending.activity !== data.subject) return;
+
+    const roll = Array.isArray(rolls) ? rolls[0] : null;
+    const rollTotal = getRollTotalValue(roll);
+    const ac = getTargetArmorClass(pending.targetToken);
+    const hit = Number.isFinite(rollTotal) && Number.isFinite(ac) ? rollTotal >= ac : false;
+
+    debugSheetTabs("evaluated attack result", {
+        itemName: pending.itemName,
+        targetName: pending.targetToken.name,
+        rollTotal,
+        armorClass: ac,
+        hit,
+    });
+
+    openAttackResultDialog({
+        activity: data.subject ?? pending.activity,
+        targetToken: pending.targetToken,
+        hit,
+        rollTotal,
+    });
+
+    AE_SHEET_TABS_STATE.pendingAttack = null;
+});
+
+Hooks.on("dnd5e.rollDamage", async (rolls, data = {}) =>
+{
+    const pending = AE_SHEET_TABS_STATE.pendingDamageApplication;
+    if (!pending?.targetToken?.actor) return;
+    if (pending.activity && data.subject && pending.activity !== data.subject) return;
+
+    const roll = Array.isArray(rolls) ? rolls[0] : null;
+    const damageTotal = getRollTotalValue(roll);
+    debugSheetTabs("damage roll payload snapshot", {
+        itemName: pending.itemName,
+        targetName: pending.targetToken.name,
+        rollCount: Array.isArray(rolls) ? rolls.length : 0,
+        damageTotal,
+        rollSummary: roll
+            ? {
+                constructorName: roll.constructor?.name,
+                total: roll.total,
+                _total: roll._total,
+                resultTotal: roll.result?.total,
+                formula: roll.formula,
+            }
+            : null,
+    });
+    if (!Number.isFinite(damageTotal)) return;
+
+    AE_SHEET_TABS_STATE.pendingDamageApplication = null;
+
+    try
+    {
+        await pending.targetToken.actor.applyDamage(damageTotal, {
+            isDelta: true,
+            originatingMessage: roll?.parent ?? null,
+        });
+
+        debugSheetTabs("applied damage to selected target", {
+            itemName: pending.itemName,
+            targetName: pending.targetToken.name,
+            damageTotal,
+        });
+        restoreLastAttackControlFocus();
+    }
+    catch (error)
+    {
+        debugSheetTabs("failed to apply damage to selected target", {
+            itemName: pending.itemName,
+            targetName: pending.targetToken.name,
+            damageTotal,
+            error,
+        });
+        restoreLastAttackControlFocus();
+    }
 });
