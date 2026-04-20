@@ -10,6 +10,223 @@ function getApplicationElement(app, html)
     return getAccessibilitySheetRoot(html);
 }
 
+function getPrimaryActiveGM()
+{
+    const activeGMs = game.users?.filter((user) => user.active && user.isGM) ?? [];
+    if (!activeGMs.length) return null;
+    return activeGMs.sort((left, right) => left.id.localeCompare(right.id))[0] ?? null;
+}
+
+function getTargetTokenUuid(targetToken)
+{
+    return targetToken?.document?.uuid ?? targetToken?.uuid ?? null;
+}
+
+function canCurrentUserApplyToTarget(targetToken)
+{
+    const tokenDocument = targetToken?.document ?? targetToken ?? null;
+    if (tokenDocument?.isOwner) return true;
+    const actor = targetToken?.actor ?? tokenDocument?.actor ?? null;
+    return !!actor?.isOwner;
+}
+
+async function applyRollResultToTarget(targetToken, appliedAmount, options = {})
+{
+    if (typeof targetToken?.applyDamage === "function")
+    {
+        await targetToken.applyDamage(appliedAmount, options);
+        return "token";
+    }
+
+    if (typeof targetToken?.object?.applyDamage === "function")
+    {
+        await targetToken.object.applyDamage(appliedAmount, options);
+        return "token-object";
+    }
+
+    if (typeof targetToken?.actor?.applyDamage === "function")
+    {
+        await targetToken.actor.applyDamage(appliedAmount, options);
+        return "actor";
+    }
+
+    throw new Error("Target does not support applyDamage.");
+}
+
+function emitModuleSocket(payload)
+{
+    game.socket?.emit(AE_MODULE_SOCKET, payload);
+}
+
+function requestGMApplyRollResult({
+    targetToken,
+    appliedAmount,
+    originatingMessage,
+    itemName,
+    targetName,
+    rollType,
+    isHealingRoll,
+    damageTotal,
+})
+{
+    const activeGM = getPrimaryActiveGM();
+    if (!activeGM)
+    {
+        return Promise.reject(new Error("No active GM is available to apply the roll result."));
+    }
+
+    const requestId = foundry.utils.randomID();
+    const targetTokenUuid = getTargetTokenUuid(targetToken);
+    if (!targetTokenUuid)
+    {
+        return Promise.reject(new Error("Target token UUID is unavailable."));
+    }
+
+    return new Promise((resolve, reject) =>
+    {
+        const timeoutId = window.setTimeout(() =>
+        {
+            AE_SOCKET_REQUESTS.delete(requestId);
+            reject(new Error("Timed out waiting for GM roll application."));
+        }, 10000);
+
+        AE_SOCKET_REQUESTS.set(requestId, {
+            resolve,
+            reject,
+            timeoutId,
+        });
+
+        debugSheetTabs("requested GM roll application", {
+            requestId,
+            targetTokenUuid,
+            itemName,
+            targetName,
+            appliedAmount,
+            gmId: activeGM.id,
+        });
+
+        emitModuleSocket({
+            type: AE_SOCKET_ACTIONS.APPLY_ROLL_RESULT,
+            requestId,
+            requesterId: game.user.id,
+            gmId: activeGM.id,
+            targetTokenUuid,
+            appliedAmount,
+            originatingMessageId: originatingMessage?.id ?? null,
+            itemName,
+            targetName,
+            rollType,
+            isHealingRoll,
+            damageTotal,
+        });
+    });
+}
+
+async function handleGMApplyRollResultRequest(payload)
+{
+    debugSheetTabs("received GM roll application request", {
+        requestId: payload?.requestId,
+        requesterId: payload?.requesterId,
+        gmId: payload?.gmId,
+        currentUserId: game.user?.id,
+        isGM: game.user?.isGM,
+        targetTokenUuid: payload?.targetTokenUuid,
+        itemName: payload?.itemName,
+        targetName: payload?.targetName,
+    });
+
+    if (!game.user?.isGM) return;
+    if (payload?.gmId && payload.gmId !== game.user.id) return;
+
+    const targetReference = fromUuidSync(payload.targetTokenUuid);
+    const originatingMessage = payload.originatingMessageId ? game.messages?.get(payload.originatingMessageId) ?? null : null;
+
+    try
+    {
+        const applyPath = await applyRollResultToTarget(targetReference, payload.appliedAmount, {
+            isDelta: true,
+            originatingMessage,
+        });
+
+        debugSheetTabs("GM applied roll result for player request", {
+            requestId: payload.requestId,
+            itemName: payload.itemName,
+            targetName: payload.targetName,
+            applyPath,
+        });
+
+        emitModuleSocket({
+            type: AE_SOCKET_ACTIONS.APPLY_ROLL_RESULT_RESPONSE,
+            requestId: payload.requestId,
+            requesterId: payload.requesterId,
+            ok: true,
+            itemName: payload.itemName,
+            targetName: payload.targetName,
+            applyPath,
+        });
+    }
+    catch (error)
+    {
+        emitModuleSocket({
+            type: AE_SOCKET_ACTIONS.APPLY_ROLL_RESULT_RESPONSE,
+            requestId: payload.requestId,
+            requesterId: payload.requesterId,
+            ok: false,
+            itemName: payload.itemName,
+            targetName: payload.targetName,
+            error: error?.message ?? String(error),
+        });
+    }
+}
+
+function handleApplyRollResultResponse(payload)
+{
+    if (payload?.requesterId !== game.user.id) return;
+
+    const pending = AE_SOCKET_REQUESTS.get(payload.requestId);
+    if (!pending) return;
+
+    window.clearTimeout(pending.timeoutId);
+    AE_SOCKET_REQUESTS.delete(payload.requestId);
+
+    debugSheetTabs("received GM roll application response", {
+        requestId: payload.requestId,
+        ok: payload.ok,
+        itemName: payload.itemName,
+        targetName: payload.targetName,
+        applyPath: payload.applyPath,
+        error: payload.error,
+    });
+
+    if (payload.ok) pending.resolve(payload);
+    else pending.reject(new Error(payload.error ?? "GM roll application failed."));
+}
+
+function handleModuleSocketMessage(payload)
+{
+    debugSheetTabs("received module socket message", {
+        type: payload?.type,
+        requestId: payload?.requestId,
+        requesterId: payload?.requesterId,
+        gmId: payload?.gmId,
+        currentUserId: game.user?.id,
+        isGM: game.user?.isGM,
+    });
+
+    if (!payload?.type) return;
+
+    if (payload.type === AE_SOCKET_ACTIONS.APPLY_ROLL_RESULT)
+    {
+        void handleGMApplyRollResultRequest(payload);
+        return;
+    }
+
+    if (payload.type === AE_SOCKET_ACTIONS.APPLY_ROLL_RESULT_RESPONSE)
+    {
+        handleApplyRollResultResponse(payload);
+    }
+}
+
 const AE_SHEET_TABS_STATE = {
     activeApp: null,
     activeRoot: null,
@@ -20,8 +237,15 @@ const AE_SHEET_TABS_STATE = {
     lastAttackControlDescriptor: null,
 };
 
+const AE_MODULE_ID = "accessibility-enhancements";
+const AE_MODULE_SOCKET = `module.${AE_MODULE_ID}`;
+const AE_SOCKET_ACTIONS = {
+    APPLY_ROLL_RESULT: "applyRollResult",
+    APPLY_ROLL_RESULT_RESPONSE: "applyRollResultResponse",
+};
 const AE_SHEET_TABS_DEBUG = true;
 const AE_SHEET_HINTS_ANNOUNCED = new Set();
+const AE_SOCKET_REQUESTS = new Map();
 const AE_BASE_PANEL_ENTRY_SELECTORS = [
     '[data-action="roll"]',
     '.rollable',
@@ -2586,6 +2810,17 @@ window.addEventListener("keydown", event =>
     target.focus({ preventScroll: false });
 }, true);
 
+Hooks.once("ready", () =>
+{
+    game.socket?.on(AE_MODULE_SOCKET, handleModuleSocketMessage);
+    debugSheetTabs("registered module socket listener", {
+        socket: AE_MODULE_SOCKET,
+        userId: game.user?.id,
+        isGM: game.user?.isGM,
+        hasSocket: !!game.socket,
+    });
+});
+
 Hooks.on("renderApplicationV2", (app, html) =>
 {
     enhanceActorSheetTabs(app, html);
@@ -2691,10 +2926,30 @@ async function handleRollDamageHook(rolls, data = {}, hookName = "dnd5e.rollDama
 
     try
     {
-        await pending.targetToken.actor.applyDamage(appliedAmount, {
+        const applyOptions = {
             isDelta: true,
             originatingMessage: roll?.parent ?? null,
-        });
+        };
+        let applyPath = "actor";
+
+        if (!game.user.isGM && !canCurrentUserApplyToTarget(pending.targetToken))
+        {
+            const response = await requestGMApplyRollResult({
+                targetToken: pending.targetToken,
+                appliedAmount,
+                originatingMessage: roll?.parent ?? null,
+                itemName: pending.itemName,
+                targetName: pending.targetToken.name,
+                rollType,
+                isHealingRoll,
+                damageTotal,
+            });
+            applyPath = `gm:${response.applyPath ?? "unknown"}`;
+        }
+        else
+        {
+            applyPath = await applyRollResultToTarget(pending.targetToken, appliedAmount, applyOptions);
+        }
 
         debugSheetTabs("applied roll result to selected target", {
             itemName: pending.itemName,
@@ -2703,6 +2958,7 @@ async function handleRollDamageHook(rolls, data = {}, hookName = "dnd5e.rollDama
             appliedAmount,
             rollType,
             isHealingRoll,
+            applyPath,
         });
         restoreLastAttackControlFocus();
     }
@@ -2712,7 +2968,7 @@ async function handleRollDamageHook(rolls, data = {}, hookName = "dnd5e.rollDama
             itemName: pending.itemName,
             targetName: pending.targetToken.name,
             damageTotal,
-            error,
+            error: error?.message ?? String(error),
         });
         restoreLastAttackControlFocus();
     }
