@@ -16,6 +16,7 @@ const AE_SHEET_TABS_STATE = {
     pendingAttack: null,
     pendingDamageApplication: null,
     lastAttackControl: null,
+    lastAttackControlDescriptor: null,
 };
 
 const AE_SHEET_TABS_DEBUG = true;
@@ -1247,21 +1248,60 @@ function getRollTotalValue(roll)
 function restoreLastAttackControlFocus()
 {
     const control = AE_SHEET_TABS_STATE.lastAttackControl;
-    if (!(control instanceof HTMLElement)) return;
-    if (!document.contains(control)) return;
+    let target = control instanceof HTMLElement && document.contains(control) ? control : null;
+
+    if (!target)
+    {
+        const descriptor = AE_SHEET_TABS_STATE.lastAttackControlDescriptor;
+        const root = AE_SHEET_TABS_STATE.activeRoot;
+        if (descriptor && root instanceof HTMLElement)
+        {
+            const row = descriptor.itemId
+                ? root.querySelector(`[data-item-id="${CSS.escape(descriptor.itemId)}"]`)
+                : null;
+
+            if (row instanceof HTMLElement)
+            {
+                target = row.querySelector(descriptor.selector ?? "") ?? row.querySelector(".item-name, .item-action, .rollable, button, a");
+            }
+        }
+    }
+
+    if (!(target instanceof HTMLElement)) return;
 
     requestAnimationFrame(() =>
     {
         requestAnimationFrame(() =>
         {
-            control.focus({ preventScroll: false });
+            target.focus({ preventScroll: false });
             debugSheetTabs("restored focus to last attack control", {
-                tag: control.tagName,
-                classes: control.className,
-                text: control.textContent?.trim()?.slice(0, 80),
+                tag: target.tagName,
+                classes: target.className,
+                text: target.textContent?.trim()?.slice(0, 80),
             });
         });
     });
+}
+
+function getAttackControlDescriptor(element)
+{
+    if (!(element instanceof HTMLElement)) return null;
+
+    const row = getInventoryRowElement(element);
+    const itemId = row?.dataset?.itemId ?? "";
+    const selector = element.matches(".item-name, .item-action, .rollable")
+        ? ".item-name.item-action.rollable, .item-name, .item-action, .rollable"
+        : element.matches('[data-action="equip"]')
+            ? '[data-action="equip"]'
+            : element.matches('[data-context-menu]')
+                ? '[data-context-menu]'
+                : element.matches(".item-control")
+                    ? ".item-control"
+                    : element.matches("button, a")
+                        ? element.tagName.toLowerCase()
+                        : "";
+
+    return itemId ? { itemId, selector } : null;
 }
 
 function focusDialogControl(dialog, selector)
@@ -1370,6 +1410,7 @@ async function activateInventoryControl(element, app, event)
 {
     if (!(element instanceof HTMLElement)) return;
     AE_SHEET_TABS_STATE.lastAttackControl = element;
+    AE_SHEET_TABS_STATE.lastAttackControlDescriptor = getAttackControlDescriptor(element);
     const attackActivity = getInventoryAttackActivity(element, app);
     const usableActivity = getInventoryUsableActivity(element, app);
 
