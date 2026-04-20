@@ -210,6 +210,8 @@ const AE_SHEET_ADAPTERS = [
         excludedPanelTargetSelectors: [
             '.filter-control',
             '.adjustment-button',
+            '.items-header',
+            '.item-header',
             '.item-detail.item-quantity input',
             '.item-detail.item-quantity',
             '.item-detail.item-price',
@@ -233,6 +235,21 @@ function debugSheetTabs(message, details)
     if (!AE_SHEET_TABS_DEBUG) return;
     if (details === undefined) console.log(`[AE SheetTabs] ${message}`);
     else console.log(`[AE SheetTabs] ${message}`, details);
+}
+
+function getElementDebugSummary(element)
+{
+    if (!(element instanceof HTMLElement)) return null;
+
+    return {
+        tag: element.tagName,
+        classes: element.className,
+        tabIndex: element.tabIndex,
+        role: element.getAttribute("role"),
+        dataTab: element.dataset?.tab,
+        dataAction: element.dataset?.action,
+        text: element.textContent?.trim()?.replace(/\s+/g, " ")?.slice(0, 80) ?? "",
+    };
 }
 
 function getSheetAdapter(app, root)
@@ -321,13 +338,23 @@ function getSheetFocusContainer(root)
     return root.querySelector(".window-content, .sheet-body, .main-content") || root;
 }
 
-function isFocusableElement(element)
+function isRenderedElement(element)
 {
     if (!(element instanceof HTMLElement)) return false;
     if (element.hidden) return false;
     if (element.matches("[disabled], [inert], [tabindex='-1']")) return false;
     if (element.closest("[hidden], [inert], .hidden")) return false;
+
+    const style = getComputedStyle(element);
+    if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
+    if (element.getClientRects().length === 0 && style.position !== "fixed") return false;
+
     return true;
+}
+
+function isFocusableElement(element)
+{
+    return isRenderedElement(element);
 }
 
 function getFocusableElements(root)
@@ -368,13 +395,7 @@ function getFocusableLikeElements(root)
         ".item-control",
     ].join(", ");
 
-    return [...root.querySelectorAll(selector)].filter(element =>
-    {
-        if (!(element instanceof HTMLElement)) return false;
-        if (element.hidden) return false;
-        if (element.closest("[hidden], [inert], .hidden")) return false;
-        return true;
-    });
+    return [...root.querySelectorAll(selector)].filter(element => isRenderedElement(element));
 }
 
 function getPanelTargetRoot(panel, adapter)
@@ -390,6 +411,24 @@ function getPanelTargetRoot(panel, adapter)
     return panel;
 }
 
+function isExcludedPanelElement(element, adapter)
+{
+    if (!(element instanceof HTMLElement)) return false;
+
+    const excludedSelectors = [...new Set(adapter.excludedPanelTargetSelectors ?? [])];
+    return excludedSelectors.some(selector =>
+    {
+        try
+        {
+            return element.matches(selector) || !!element.closest(selector);
+        }
+        catch
+        {
+            return false;
+        }
+    });
+}
+
 function getPreferredPanelEntryTarget(panel, adapter)
 {
     const targetRoot = getPanelTargetRoot(panel, {
@@ -401,12 +440,8 @@ function getPreferredPanelEntryTarget(panel, adapter)
     for (const selector of preferredSelectors)
     {
         const candidate = [...targetRoot.querySelectorAll(selector)].find(element =>
-        {
-            if (!(element instanceof HTMLElement)) return false;
-            if (element.hidden) return false;
-            if (element.closest("[hidden], [inert], .hidden")) return false;
-            return true;
-        });
+            isRenderedElement(element) && !isExcludedPanelElement(element, adapter)
+        );
 
         if (!candidate) continue;
         if (!candidate.hasAttribute("tabindex")) candidate.tabIndex = 0;
@@ -426,10 +461,8 @@ function getPanelKeyboardTargets(panel, adapter)
 
     for (const element of targetRoot.querySelectorAll(selector))
     {
-        if (!(element instanceof HTMLElement)) continue;
-        if (element.hidden) continue;
-        if (element.closest("[hidden], [inert], .hidden")) continue;
-        if (excludedSelectors.some(excluded => element.matches(excluded))) continue;
+        if (!isRenderedElement(element)) continue;
+        if (isExcludedPanelElement(element, adapter)) continue;
 
         if (!element.hasAttribute("tabindex") && !element.matches("button, input, select, textarea, a[href]"))
         {
@@ -440,6 +473,50 @@ function getPanelKeyboardTargets(panel, adapter)
     }
 
     return targets;
+}
+
+function debugSheetMarkup(root, app, requestedTabId = null)
+{
+    if (!AE_SHEET_TABS_DEBUG) return;
+    if (!(root instanceof HTMLElement)) return;
+
+    const activeTab = getActiveTabControl(root);
+    const activePanel = activeTab ? findTabPanel(root, activeTab) : null;
+    const requestedPanel = requestedTabId
+        ? root.querySelector(`.tab[data-tab="${CSS.escape(requestedTabId)}"]`)
+        : null;
+    const detailsPanel = root.querySelector('[data-tab="details"]');
+    const targetPanel = requestedPanel ?? activePanel ?? detailsPanel;
+    if (!(targetPanel instanceof HTMLElement)) return;
+
+    const adapter = getSheetAdapter(app, root);
+    const panelTargets = getPanelKeyboardTargets(targetPanel, adapter).map(getElementDebugSummary);
+    const normalizedMarkup = targetPanel.outerHTML?.replace(/\s+/g, " ");
+
+    debugSheetTabs("sheet markup snapshot", {
+        appId: app?.id,
+        adapter: adapter.id,
+        requestedTabId,
+        activeTabId: getTabId(activeTab),
+        activeTab: getElementDebugSummary(activeTab),
+        panel: getElementDebugSummary(targetPanel),
+        panelTargetCount: panelTargets.length,
+        panelTargets: panelTargets.slice(0, 24),
+        markupLength: normalizedMarkup?.length ?? 0,
+    });
+
+    console.log("[AE SheetTabs] sheet markup html");
+    console.log(normalizedMarkup);
+
+    return {
+        appId: app?.id,
+        adapter: adapter.id,
+        requestedTabId,
+        activeTabId: getTabId(activeTab),
+        panelTargetCount: panelTargets.length,
+        panelTargets,
+        markup: normalizedMarkup,
+    };
 }
 
 function getCurrentPanelKeyboardTarget(targets, activeElement)
@@ -465,22 +542,29 @@ function isTextEntryElement(element)
     return element.matches("input, textarea, select, [contenteditable='true']");
 }
 
-function getFocusableElementsInPanel(panel)
+function getFocusableElementsInPanel(panel, adapter = null)
 {
-    return getFocusableElements(panel).filter(element => element !== panel);
+    return getFocusableElements(panel).filter(element =>
+    {
+        if (element === panel) return false;
+        if (!adapter) return true;
+        return !isExcludedPanelElement(element, adapter);
+    });
 }
 
 function getPanelEntryTarget(panel)
 {
     const sheetRoot = panel.closest(".window-app, .application, .actor");
     const adapter = getSheetAdapter(AE_SHEET_TABS_STATE.activeApp, sheetRoot);
-    const focusables = getFocusableElementsInPanel(panel);
+    const focusables = getFocusableElementsInPanel(panel, adapter);
     if (focusables.length) return { target: focusables[0], usedFallback: false, source: "native-focusable" };
 
     const preferred = getPreferredPanelEntryTarget(panel, adapter);
     if (preferred) return preferred;
 
-    const focusableLike = getFocusableLikeElements(panel).filter(element => element !== panel);
+    const focusableLike = getFocusableLikeElements(panel).filter(element =>
+        element !== panel && !isExcludedPanelElement(element, adapter)
+    );
     const firstCandidate = focusableLike.find(element => !element.matches("[tabindex='-1'], [disabled], [inert]"));
     if (firstCandidate)
     {
@@ -565,13 +649,118 @@ function getInventoryItemDocument(element, app)
     return null;
 }
 
+function getInventoryAttackActivity(element, app)
+{
+    const item = getInventoryItemDocument(element, app);
+    const activities = item?.system?.activities;
+    if (!activities?.filter) return null;
+
+    return activities.filter(activity => activity?.type === "attack" && activity?.canUse)?.[0] ?? null;
+}
+
+function getFirstInteractiveDescendant(root)
+{
+    if (!(root instanceof HTMLElement)) return null;
+
+    const selector = [
+        "[data-midi-action]",
+        ".dialog-button",
+        ".roll-link-group",
+        ".roll-action",
+        "button",
+        "a[href]",
+        "a[data-action]",
+        "[role='button']",
+        "input",
+        "select",
+        "textarea",
+        "[tabindex]:not([tabindex='-1'])",
+    ].join(", ");
+
+    for (const element of root.querySelectorAll(selector))
+    {
+        if (!isRenderedElement(element)) continue;
+        if (!element.hasAttribute("tabindex") && !element.matches("button, input, select, textarea, a[href]"))
+        {
+            element.tabIndex = 0;
+        }
+        return element;
+    }
+
+    return null;
+}
+
+function getLatestChatMessageElement()
+{
+    const messages = document.querySelectorAll("#chat-log .message, #chat-log .chat-message, .chat-message");
+    const latest = messages[messages.length - 1];
+    return latest instanceof HTMLElement ? latest : null;
+}
+
+function focusInventoryActivationResult(app, previousWindowId, previousChatMessage)
+{
+    let tries = 12;
+
+    const attemptFocus = () =>
+    {
+        const activeWindow = ui?.activeWindow;
+        if (activeWindow && activeWindow.id !== previousWindowId && activeWindow !== app)
+        {
+            const windowRoot = getApplicationElement(activeWindow, activeWindow?.element);
+            const windowTarget = getFirstInteractiveDescendant(windowRoot);
+            if (windowTarget)
+            {
+                windowTarget.focus({ preventScroll: false });
+                debugSheetTabs("focused inventory activation window target", {
+                    sourceWindowId: activeWindow.id,
+                    sourceWindowClass: activeWindow.constructor?.name,
+                    targetTag: windowTarget.tagName,
+                    targetClasses: windowTarget.className,
+                });
+                return;
+            }
+        }
+
+        const latestChatMessage = getLatestChatMessageElement();
+        if (latestChatMessage && latestChatMessage !== previousChatMessage)
+        {
+            const chatTarget = getFirstInteractiveDescendant(latestChatMessage);
+            if (chatTarget)
+            {
+                chatTarget.focus({ preventScroll: false });
+                debugSheetTabs("focused inventory activation chat target", {
+                    messageId: latestChatMessage.dataset?.messageId,
+                    targetTag: chatTarget.tagName,
+                    targetClasses: chatTarget.className,
+                });
+                return;
+            }
+        }
+
+        if (--tries > 0) setTimeout(attemptFocus, 100);
+    };
+
+    setTimeout(attemptFocus, 50);
+}
+
 async function activateInventoryControl(element, app, event)
 {
     if (!(element instanceof HTMLElement)) return;
+    const previousWindowId = ui?.activeWindow?.id ?? null;
+    const previousChatMessage = getLatestChatMessageElement();
+    const attackActivity = getInventoryAttackActivity(element, app);
 
     if (element.matches(".tidy-table-row-use-button"))
     {
-        element.click();
+        if (attackActivity?.rollAttack)
+        {
+            await attackActivity.rollAttack({ event });
+        }
+        else
+        {
+            element.click();
+        }
+        focusInventoryActivationResult(app, previousWindowId, previousChatMessage);
         return;
     }
 
@@ -581,7 +770,19 @@ async function activateInventoryControl(element, app, event)
         return;
     }
 
-    element.click();
+    if (
+        attackActivity?.rollAttack
+        && (element.matches(".item-name, .item-action, .rollable, [data-action='use']") || element.closest(".item-name, .item-action, .rollable, [data-action='use']"))
+    )
+    {
+        await attackActivity.rollAttack({ event });
+    }
+    else
+    {
+        element.click();
+    }
+
+    focusInventoryActivationResult(app, previousWindowId, previousChatMessage);
 }
 
 function getInventoryControlLabel(element)
@@ -635,6 +836,12 @@ function getInventoryControlLabel(element)
 
 function applyInventoryAccessibility(root)
 {
+    for (const header of root.querySelectorAll(".items-header, .items-header .item-name, .items-header .item-header"))
+    {
+        if (!(header instanceof HTMLElement)) continue;
+        if (header.getAttribute("tabindex") === "0") header.removeAttribute("tabindex");
+    }
+
     const controls = root.querySelectorAll(
         ".item-name, .tidy-table-row-use-button, .item-toggle, .command.decrementer, .command.incrementer, .tidy-table-button, .button.button-icon-only, .quantity-tracker-input"
     );
@@ -642,6 +849,7 @@ function applyInventoryAccessibility(root)
     for (const control of controls)
     {
         if (!(control instanceof HTMLElement)) continue;
+        if (control.closest(".items-header")) continue;
 
         const label = getInventoryControlLabel(control);
         if (label && !control.getAttribute("aria-label")) control.setAttribute("aria-label", label);
@@ -857,6 +1065,20 @@ function getActiveActorSheetState()
     };
 }
 
+globalThis.AESheetTabsDebug ??= {};
+globalThis.AESheetTabsDebug.dumpActiveSheetMarkup = function dumpActiveSheetMarkup()
+{
+    const { app, root } = getActiveActorSheetState();
+    if (!app || !root) return null;
+    return debugSheetMarkup(root, app) ?? null;
+};
+globalThis.AESheetTabsDebug.dumpSheetMarkup = function dumpSheetMarkup(tabId)
+{
+    const { app, root } = getActiveActorSheetState();
+    if (!app || !root) return null;
+    return debugSheetMarkup(root, app, tabId) ?? null;
+};
+
 function findTabPanel(root, control)
 {
     const tabId = getTabId(control);
@@ -975,6 +1197,7 @@ function activateTabFromKeyboard(root, control, app)
     control.click();
     syncTabAccessibility(root, app);
     focusActivePanel(root, control);
+    requestAnimationFrame(() => debugSheetMarkup(root, app));
 }
 
 function attachSheetTabHandlers(root, app)
@@ -1254,6 +1477,7 @@ function enhanceActorSheetTabs(app, html)
     applyInventoryAccessibility(root);
     setActiveActorSheet(app, root);
     attachSheetTabHandlers(root, app);
+    debugSheetMarkup(root, app);
 
     debugSheetTabs("enhanceActorSheetTabs complete", {
         appId: app?.id,
@@ -1274,6 +1498,25 @@ window.addEventListener("keydown", event =>
         && isKeyboardActivatableElement(activeElement)
     )
     {
+        const { root } = getActiveActorSheetState();
+        if (
+            activeElement instanceof HTMLElement
+            && root instanceof HTMLElement
+            && root.contains(activeElement)
+            && (
+                isInventoryKeyboardActionTarget(activeElement)
+                || !!activeElement.closest(".item, .activity-row, .inventory-list, [data-item-list='inventory']")
+            )
+        )
+        {
+            debugSheetTabs("global keyboard activation skipped for sheet inventory target", {
+                activeElementTag: activeElement?.tagName,
+                activeElementClasses: activeElement?.className,
+                activeElementText: activeElement?.textContent?.trim()?.slice(0, 80),
+            });
+            return;
+        }
+
         event.preventDefault();
         event.stopPropagation();
         activeElement.click();
