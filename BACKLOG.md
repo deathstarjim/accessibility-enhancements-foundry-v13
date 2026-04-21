@@ -30,9 +30,9 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 
 - [x] **"Where am I" hotkey** — configurable keybind (default: `W`) that re-reads the controlled token's position, HP, and any active conditions via the assertive live region. Works on demand without any interaction.
 - [ ] **Initial token selection / open sheet flow** — provide a keyboard-first way on initial world load to find owned tokens, select/control one, and open its character sheet without needing a mouse or pre-existing canvas focus.
-- [ ] **Tab through nearby tokens** — Tab/Shift-Tab to cycle through tokens on the canvas; Enter to select/control, Shift+Enter to target. Replaces needing to click tokens.
-- [ ] **Nearby token scan** — keybind announces tokens within a configurable radius of the controlled token, including distance, grid coordinate, and disposition filter (friendly, neutral, secret, hostile, or all). This gives a blind player situational awareness before choosing a target.
-- [ ] **Keyboard token targeting** — dedicated keybind to toggle targeting on the currently focused/controlled token. Avoids right-click dependency entirely.
+- [ ] **Tab through nearby tokens** — Tab/Shift-Tab to cycle through tokens on the canvas; Enter to select/control, Shift+Enter to target. Still useful outside sheet-driven combat flows for scene exploration, selecting allies, and interacting with placed tokens.
+- [ ] **Nearby token scan** — keybind announces tokens within a configurable radius of the controlled token, including distance, grid coordinate, and disposition filter (friendly, neutral, secret, hostile, or all). Useful for situational awareness even when combat targeting is handled from the sheet.
+- [ ] **Keyboard token targeting** — dedicated keybind to toggle targeting on the currently focused/controlled token. Keeps canvas targeting available for workflows that do not start from the character sheet.
 - [ ] **Arrow key token movement** — move a controlled token one grid square at a time using arrow keys (Foundry has partial support; ensure it works and triggers our announcements).
 - [ ] **Keyboard ruler / distance check** — announce walking distance from controlled token to the currently focused token (e.g. "Goblin Scout is 15 feet away, at B5.").
 
@@ -51,6 +51,7 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 
 - [ ] **Actor sheet keyboard navigation audit** — verify all interactive elements on the PF2E character sheet are reachable and operable by keyboard alone (Tab order, Enter/Space activation).
 - [ ] **Character sheet edit-mode access** — provide a keyboard-friendly way to enter and exit actor-sheet edit mode on default and Tidy 5e sheets so players can level up or change sheet data without hunting for the wrench icon.
+- [ ] **5e level-up workflow** — make the D&D 5e leveling process keyboard-friendly end to end: enter sheet edit mode, reach the Character/Details tab, activate `Level Up`, and complete the level-up dialogs without requiring the mouse.
 - [ ] **Spell/action quick-cast hotkey** — numbered hotkeys (1–9) to trigger frequently used actions from the hotbar without opening the character sheet.
 - [ ] **Compendium browser keyboard navigation** — verify Tab/Arrow/Enter work correctly in the PF2E compendium browser after our `additems.js` changes.
 - [ ] **Tooltip / description readout** — pressing a key while focused on an item/spell/feat reads the full description text via the polite live region.

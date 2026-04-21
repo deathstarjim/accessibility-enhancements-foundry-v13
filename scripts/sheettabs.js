@@ -1,3 +1,5 @@
+import { buildSheetAdapters } from "./sheettabs/adapters.js";
+
 function getAccessibilitySheetRoot(html)
 {
     return html instanceof HTMLElement ? html : html?.[0] instanceof HTMLElement ? html[0] : null;
@@ -236,7 +238,6 @@ const AE_SHEET_TABS_STATE = {
     lastAttackControl: null,
     lastAttackControlDescriptor: null,
 };
-
 const AE_MODULE_ID = "accessibility-enhancements";
 const AE_MODULE_SOCKET = `module.${AE_MODULE_ID}`;
 const AE_SOCKET_ACTIONS = {
@@ -263,23 +264,6 @@ const AE_BASE_PANEL_TARGET_SELECTORS = [
     'textarea',
 ];
 
-function resolveTidyPanelTargetRoot(panel)
-{
-    if (!(panel instanceof HTMLElement)) return null;
-
-    const tabId = getPanelTabId(panel);
-    if (tabId === "attributes") return panel;
-
-    if (tabId === "inventory" || tabId === "spellbook")
-    {
-        return panel.querySelector(
-            '[data-tidy-sheet-part="items-container"], [data-tidy-sheet-part="inventory"], [data-tidy-sheet-part="spellbook"], [data-tidy-sheet-part="item-table"], .tidy-table-container'
-        ) || panel;
-    }
-
-    return null;
-}
-
 Hooks.on("init", () =>
 {
     game.keybindings.register(AE_MODULE_ID, "focusCharacterSheetTabs", {
@@ -294,237 +278,7 @@ Hooks.on("init", () =>
     });
 });
 
-const AE_SHEET_ADAPTERS = [
-    {
-        id: "tidy5e-classic",
-        matches: (app, root) => root?.dataset?.sheetModule === "tidy5e-sheet" && root.classList.contains("classic"),
-        useWholePanelForTargets: false,
-        localTabReturnHotkey: true,
-        preferRootClassTabIdForHotkey: false,
-        resolveTargetRoot: resolveTidyPanelTargetRoot,
-        contentRootSelectors: [
-            '[data-tidy-sheet-part="abilities"]',
-            '[data-tidy-sheet-part="ability-scores"]',
-            '[data-tidy-sheet-part="saving-throws"]',
-            '[data-tidy-sheet-part="inventory"]',
-            '[data-tidy-sheet-part="spellbook"]',
-            '[data-tidy-sheet-part="item-table"]',
-            '[data-tidy-sheet-part="skills-list"]',
-            '[data-tidy-sheet-part="tools-list"]',
-            '.tidy-table-container',
-            '[data-tidy-sheet-part="items-container"]',
-            '.skills-list-container',
-            '.skills.card',
-            '.abilities.card',
-            '.saves.card',
-        ],
-        entrySelectors: [
-            '[data-tidy-sheet-part="skill-roller"]',
-            '.use-ability-roll-button',
-            '[data-tidy-sheet-part="ability-save-roller"]',
-            '.ability-save-roller',
-            '.item-name',
-            '.quantity-tracker-input',
-            '.command.decrementer',
-            '.command.incrementer',
-            '.item-toggle',
-            '.tidy-table-row-use-button',
-            '.tidy-table-button',
-            '.tidy5e-skill-name',
-            '.tool-roller',
-            '.tool-check-roller',
-            '.ability-mod',
-            '.ability-save',
-            '.trait-item',
-            '.item-name[role="button"]',
-        ],
-        panelTargetSelectors: [
-            '[data-tidy-sheet-part="skill-roller"]',
-            '.use-ability-roll-button',
-            '[data-tidy-sheet-part="ability-save-roller"]',
-            '.ability-save-roller',
-            '.item-name',
-            '.quantity-tracker-input',
-            '.command.decrementer',
-            '.command.incrementer',
-            '.item-toggle',
-            '.tidy-table-row-use-button',
-            '.tidy-table-button',
-            '.tidy5e-skill-name',
-            '.tool-roller',
-            '.tool-check-roller',
-            '.ability-mod',
-            '.ability-save',
-            '.trait-item',
-            '.item-name[role="button"]',
-            '.button',
-            '.inline-transparent-button',
-        ],
-        excludedPanelTargetSelectors: [
-            '.skill-expand-button',
-            '.skill-ability',
-            '.button-icon-only.proficiency',
-            '.action-bar button',
-            '.sort-menu-option',
-            '.clear-all-filters',
-            '.currency-conversion',
-            '.item-create',
-            '.expand-button.button-toggle',
-        ],
-    },
-    {
-        id: "tidy5e-default",
-        matches: (app, root) => root?.dataset?.sheetModule === "tidy5e-sheet",
-        useWholePanelForTargets: false,
-        localTabReturnHotkey: true,
-        preferRootClassTabIdForHotkey: false,
-        resolveTargetRoot: resolveTidyPanelTargetRoot,
-        contentRootSelectors: [
-            '[data-tidy-sheet-part="abilities"]',
-            '[data-tidy-sheet-part="ability-scores"]',
-            '[data-tidy-sheet-part="saving-throws"]',
-            '[data-tidy-sheet-part="inventory"]',
-            '[data-tidy-sheet-part="spellbook"]',
-            '[data-tidy-sheet-part="item-table"]',
-            '[data-tidy-sheet-part="skills-list"]',
-            '[data-tidy-sheet-part="tools-list"]',
-            '.tidy-table-container',
-            '[data-tidy-sheet-part="items-container"]',
-            '.skills-list-container',
-            '.skills.card',
-            '.abilities.card',
-            '.saves.card',
-        ],
-        entrySelectors: [
-            '[data-tidy-sheet-part="skill-roller"]',
-            '.use-ability-roll-button',
-            '[data-tidy-sheet-part="ability-save-roller"]',
-            '.ability-save-roller',
-            '.item-name',
-            '.quantity-tracker-input',
-            '.command.decrementer',
-            '.command.incrementer',
-            '.item-toggle',
-            '.tidy-table-row-use-button',
-            '.tidy-table-button',
-            '.tidy5e-skill-name',
-            '.tool-roller',
-            '.tool-check-roller',
-            '.ability-mod',
-            '.ability-save',
-            '.trait-item',
-            '.item-name[role="button"]',
-        ],
-        panelTargetSelectors: [
-            '[data-tidy-sheet-part="skill-roller"]',
-            '.use-ability-roll-button',
-            '[data-tidy-sheet-part="ability-save-roller"]',
-            '.ability-save-roller',
-            '.item-name',
-            '.quantity-tracker-input',
-            '.command.decrementer',
-            '.command.incrementer',
-            '.item-toggle',
-            '.tidy-table-row-use-button',
-            '.tidy-table-button',
-            '.tidy5e-skill-name',
-            '.tool-roller',
-            '.tool-check-roller',
-            '.ability-mod',
-            '.ability-save',
-            '.trait-item',
-            '.item-name[role="button"]',
-            '.button',
-            '.inline-transparent-button',
-        ],
-        excludedPanelTargetSelectors: [
-            '.skill-expand-button',
-            '.skill-ability',
-            '.button-icon-only.proficiency',
-            '.action-bar button',
-            '.sort-menu-option',
-            '.clear-all-filters',
-            '.currency-conversion',
-            '.item-create',
-            '.expand-button.button-toggle',
-        ],
-    },
-    {
-        id: "dnd5e-default",
-        matches: (app, root) => app?.document?.documentName === "Actor",
-        useWholePanelForTargets: true,
-        localTabReturnHotkey: true,
-        preferRootClassTabIdForHotkey: true,
-        entrySelectors: [
-            'li.item[data-item-id] .item-name.item-action.rollable',
-            'li.item[data-item-id] .activity-name.item-name.item-action.rollable',
-            'li.item[data-item-id] .item-control[data-action="equip"]',
-            'li.item[data-item-id] .item-control[data-action="toggleExpand"]',
-            'li.item[data-item-id] .item-control[data-context-menu]',
-            'li.item[data-item-id] .item-toggle',
-            '.skill-name',
-            '.saving-throw',
-            '.ability-check',
-            '.item-name',
-            '.item-action',
-            '.item-control',
-            '.rollable',
-            '[data-action="roll"]',
-            '[data-action]',
-            'button',
-            'a',
-        ],
-        panelTargetSelectors: [
-            'li.item[data-item-id] .item-name.item-action.rollable',
-            'li.item[data-item-id] .activity-name.item-name.item-action.rollable',
-            'li.item[data-item-id] .item-control[data-action="equip"]',
-            'li.item[data-item-id] .item-control[data-action="toggleExpand"]',
-            'li.item[data-item-id] .item-control[data-context-menu]',
-            'li.item[data-item-id] .item-toggle',
-            '.skill-name',
-            '.saving-throw',
-            '.ability-check',
-            '.item-control',
-            '.item-action',
-            '.item-name',
-            '.rollable',
-            '[data-action="roll"]',
-            '[data-action]',
-            'button',
-            'a',
-            'input',
-            'select',
-            'textarea',
-        ],
-        excludedPanelTargetSelectors: [
-            '.filter-control',
-            '.adjustment-button',
-            '.items-header',
-            '.item-header',
-            '.midi-info-icon',
-            '[data-action="toggleExpand"]',
-            '.activity-row',
-            '.activity-row .item-name',
-            '.activity-row .item-control',
-            '.midi-activity-buttons button',
-            '[data-midi-action]',
-            '.item-detail.item-quantity input',
-            '.item-detail.item-quantity',
-            '.item-detail.item-price',
-            '.item-detail.item-weight',
-            '.item-detail.item-roll',
-            '.item-detail.item-formula',
-            '.item-detail.item-uses',
-            '.pills-group',
-            '.pills-group .pill',
-            '.pills-group .label',
-            '.pills-group h3',
-            '.items-header',
-            '.items-section > .item-name',
-            '.inventory-element > .item-name',
-        ],
-    },
-];
+const AE_SHEET_ADAPTERS = buildSheetAdapters();
 
 function debugSheetTabs(message, details)
 {
@@ -576,19 +330,38 @@ function announceSheetTabsHint(app)
     });
 }
 
-function focusActiveActorSheetTabFromHotkey(shiftKey = false)
+function resolveSheetTabReturnTarget(app, root, shiftKey = false, activeElement = document.activeElement)
 {
-    const { app, root } = getActiveActorSheetState();
-    if (!app || !root) return false;
+    if (!(root instanceof HTMLElement)) return null;
 
     const adapter = getSheetAdapter(app, root);
     const rootClassTabId = adapter.preferRootClassTabIdForHotkey ? getRootActiveTabId(root) : "";
-    const focusedPanel = getFocusedSheetPanel(root, document.activeElement);
+    const focusedPanel = getFocusedSheetPanel(root, activeElement);
     const focusedPanelTabId = getPanelTabId(focusedPanel);
     const activeTab = resolveSheetTabReturnControl(root, adapter, shiftKey, {
         rootClassTabId,
         focusedPanelTabId,
     });
+
+    return {
+        adapter,
+        rootClassTabId,
+        focusedPanelTabId,
+        activeTab,
+    };
+}
+
+function focusSheetTabReturnTarget(app, root, shiftKey = false, activeElement = document.activeElement)
+{
+    if (!app || !(root instanceof HTMLElement)) return false;
+
+    const {
+        adapter,
+        rootClassTabId,
+        focusedPanelTabId,
+        activeTab,
+    } = resolveSheetTabReturnTarget(app, root, shiftKey, activeElement);
+
     if (!(activeTab instanceof HTMLElement)) return false;
 
     setActiveActorSheet(app, root);
@@ -605,6 +378,13 @@ function focusActiveActorSheetTabFromHotkey(shiftKey = false)
         tabClasses: activeTab?.className,
     });
     return true;
+}
+
+function focusActiveActorSheetTabFromHotkey(shiftKey = false)
+{
+    const { app, root } = getActiveActorSheetState();
+    if (!app || !root) return false;
+    return focusSheetTabReturnTarget(app, root, shiftKey, document.activeElement);
 }
 
 function isActorSheetApplication(app, root)
@@ -2479,7 +2259,7 @@ function attachSheetTabHandlers(root, app)
         {
             event.preventDefault();
             event.stopPropagation();
-            focusActiveActorSheetTabFromHotkey(false);
+            focusSheetTabReturnTarget(app, root, false, event.target);
             return;
         }
 

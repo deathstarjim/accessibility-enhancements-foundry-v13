@@ -20,7 +20,9 @@
     "scripts/norightclick.js",
     "scripts/highcontrast.js",
     "scripts/imagepreview.js",
-    "scripts/screenreader.js",
+    "scripts/screenreader.js"
+  ],
+  "esmodules": [
     "scripts/sheettabs.js"
   ],
   "styles": [
