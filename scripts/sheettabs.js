@@ -263,6 +263,23 @@ const AE_BASE_PANEL_TARGET_SELECTORS = [
     'textarea',
 ];
 
+function resolveTidyPanelTargetRoot(panel)
+{
+    if (!(panel instanceof HTMLElement)) return null;
+
+    const tabId = getPanelTabId(panel);
+    if (tabId === "attributes") return panel;
+
+    if (tabId === "inventory" || tabId === "spellbook")
+    {
+        return panel.querySelector(
+            '[data-tidy-sheet-part="items-container"], [data-tidy-sheet-part="inventory"], [data-tidy-sheet-part="spellbook"], [data-tidy-sheet-part="item-table"], .tidy-table-container'
+        ) || panel;
+    }
+
+    return null;
+}
+
 Hooks.on("init", () =>
 {
     game.keybindings.register(AE_MODULE_ID, "focusCharacterSheetTabs", {
@@ -284,11 +301,7 @@ const AE_SHEET_ADAPTERS = [
         useWholePanelForTargets: false,
         localTabReturnHotkey: true,
         preferRootClassTabIdForHotkey: false,
-        resolveTargetRoot: (panel) =>
-        {
-            if (panel?.dataset?.tabContentsFor === "attributes") return panel;
-            return null;
-        },
+        resolveTargetRoot: resolveTidyPanelTargetRoot,
         contentRootSelectors: [
             '[data-tidy-sheet-part="abilities"]',
             '[data-tidy-sheet-part="ability-scores"]',
@@ -296,7 +309,6 @@ const AE_SHEET_ADAPTERS = [
             '[data-tidy-sheet-part="inventory"]',
             '[data-tidy-sheet-part="spellbook"]',
             '[data-tidy-sheet-part="item-table"]',
-            '[data-tidy-sheet-part="item-table-row"]',
             '[data-tidy-sheet-part="skills-list"]',
             '[data-tidy-sheet-part="tools-list"]',
             '.tidy-table-container',
@@ -366,11 +378,7 @@ const AE_SHEET_ADAPTERS = [
         useWholePanelForTargets: false,
         localTabReturnHotkey: true,
         preferRootClassTabIdForHotkey: false,
-        resolveTargetRoot: (panel) =>
-        {
-            if (panel?.dataset?.tabContentsFor === "attributes") return panel;
-            return null;
-        },
+        resolveTargetRoot: resolveTidyPanelTargetRoot,
         contentRootSelectors: [
             '[data-tidy-sheet-part="abilities"]',
             '[data-tidy-sheet-part="ability-scores"]',
@@ -378,7 +386,6 @@ const AE_SHEET_ADAPTERS = [
             '[data-tidy-sheet-part="inventory"]',
             '[data-tidy-sheet-part="spellbook"]',
             '[data-tidy-sheet-part="item-table"]',
-            '[data-tidy-sheet-part="item-table-row"]',
             '[data-tidy-sheet-part="skills-list"]',
             '[data-tidy-sheet-part="tools-list"]',
             '.tidy-table-container',
@@ -1004,6 +1011,16 @@ function isLikelyInventoryMenuTrigger(element)
         || !!icon
         || text === "..."
         || text === "⋮";
+}
+
+function isOpenInventoryMenuTrigger(element)
+{
+    if (!isLikelyInventoryMenuTrigger(element)) return false;
+
+    const expanded = element.getAttribute("aria-expanded");
+    if (expanded === "true") return true;
+
+    return element.matches(".active, .open, .opened, .menu-open, [data-state='open']");
 }
 
 function isInventoryKeyboardActionTarget(element)
@@ -2561,11 +2578,11 @@ function attachSheetTabHandlers(root, app)
                 menuContainer === activeElement
                 || menuContainer?.contains(activeElement)
                 || menuTargets.some(target => target === activeElement || target.contains(activeElement))
-                || isLikelyInventoryMenuTrigger(activeElement)
+                || isOpenInventoryMenuTrigger(activeElement)
             )
         )
         {
-            const focusTargets = isLikelyInventoryMenuTrigger(activeElement)
+            const focusTargets = isOpenInventoryMenuTrigger(activeElement)
                 ? [activeElement, ...menuTargets]
                 : menuTargets;
             const currentTarget = focusTargets.find(target => target === activeElement || target.contains(activeElement))
@@ -2833,11 +2850,11 @@ window.addEventListener("keydown", event =>
             menuContainer === activeElement
             || menuContainer?.contains(activeElement)
             || menuTargets.some(target => target === activeElement || target.contains(activeElement))
-            || isLikelyInventoryMenuTrigger(activeElement)
+            || isOpenInventoryMenuTrigger(activeElement)
         )
     )
     {
-        const focusTargets = isLikelyInventoryMenuTrigger(activeElement)
+        const focusTargets = isOpenInventoryMenuTrigger(activeElement)
             ? [activeElement, ...menuTargets]
             : menuTargets;
         const currentTarget = focusTargets.find(target => target === activeElement || target.contains(activeElement))
