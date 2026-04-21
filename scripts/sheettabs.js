@@ -282,7 +282,7 @@ const AE_SHEET_ADAPTERS = [
         id: "tidy5e-classic",
         matches: (app, root) => root?.dataset?.sheetModule === "tidy5e-sheet" && root.classList.contains("classic"),
         useWholePanelForTargets: false,
-        localTabReturnHotkey: false,
+        localTabReturnHotkey: true,
         preferRootClassTabIdForHotkey: false,
         resolveTargetRoot: (panel) =>
         {
@@ -364,7 +364,7 @@ const AE_SHEET_ADAPTERS = [
         id: "tidy5e-default",
         matches: (app, root) => root?.dataset?.sheetModule === "tidy5e-sheet",
         useWholePanelForTargets: false,
-        localTabReturnHotkey: false,
+        localTabReturnHotkey: true,
         preferRootClassTabIdForHotkey: false,
         resolveTargetRoot: (panel) =>
         {
@@ -577,7 +577,7 @@ function focusActiveActorSheetTabFromHotkey(shiftKey = false)
     const adapter = getSheetAdapter(app, root);
     const rootClassTabId = adapter.preferRootClassTabIdForHotkey ? getRootActiveTabId(root) : "";
     const focusedPanel = getFocusedSheetPanel(root, document.activeElement);
-    const focusedPanelTabId = focusedPanel?.dataset?.tab ?? "";
+    const focusedPanelTabId = getPanelTabId(focusedPanel);
     const activeTab = resolveSheetTabReturnControl(root, adapter, shiftKey, {
         rootClassTabId,
         focusedPanelTabId,
@@ -676,6 +676,16 @@ function getTabControlById(root, tabId)
 function getTabId(control)
 {
     return control.dataset.tabId || control.dataset.tab || "";
+}
+
+function getPanelTabId(panel)
+{
+    if (!(panel instanceof HTMLElement)) return "";
+
+    return panel.dataset.tab
+        || panel.dataset.tabId
+        || panel.dataset.tabContentsFor
+        || "";
 }
 
 function getTabControlFromTarget(target)
