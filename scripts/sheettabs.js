@@ -1,4 +1,23 @@
 import { buildSheetAdapters } from "./sheettabs/adapters.js";
+import {
+    findTabPanel,
+    getActiveTabControl,
+    getFocusedSheetPanel,
+    getFocusableElements,
+    getInitialSheetFocusTarget,
+    getPanelTabId,
+    getRootActiveTabId,
+    getSheetFocusContainer,
+    getSiblingTabControls,
+    getTabControlById,
+    getTabControlFromTarget,
+    getTabControls,
+    getTabId,
+    getTabLabel,
+    isFocusableElement,
+    isRenderedElement,
+    resolveSheetTabReturnControl,
+} from "./sheettabs/tab-helpers.js";
 
 function getAccessibilitySheetRoot(html)
 {
@@ -406,132 +425,6 @@ function isActorSheetApplication(app, root)
     return result;
 }
 
-function getTabControls(tabList)
-{
-    return [...tabList.querySelectorAll(":scope > [data-tab], :scope > [data-tab-id], :scope > [role='tab']")];
-}
-
-function getSiblingTabControls(control)
-{
-    const tabList = control.closest("nav.tabs[data-group], [role='tablist']");
-    if (!tabList) return [];
-    return getTabControls(tabList).filter(candidate => getTabId(candidate) && isFocusableElement(candidate));
-}
-
-function getRootActiveTabId(root)
-{
-    if (!(root instanceof HTMLElement)) return "";
-
-    for (const className of root.classList)
-    {
-        if (!className.startsWith("tab-")) continue;
-        const tabId = className.slice(4);
-        if (tabId) return tabId;
-    }
-
-    return "";
-}
-
-function resolveSheetTabReturnControl(root, adapter, shiftKey = false, {
-    rootClassTabId = "",
-    focusedPanelTabId = "",
-} = {})
-{
-    if (!(root instanceof HTMLElement)) return null;
-
-    return getTabControlById(root, rootClassTabId)
-        ?? getTabControlById(root, focusedPanelTabId)
-        ?? getActiveTabControl(root)
-        ?? getInitialSheetFocusTarget(root, shiftKey);
-}
-
-function getTabControlById(root, tabId)
-{
-    if (!(root instanceof HTMLElement) || !tabId) return null;
-
-    const selector = [
-        `[role='tab'][data-tab="${CSS.escape(tabId)}"]`,
-        `[role='tab'][data-tab-id="${CSS.escape(tabId)}"]`,
-        `nav.tabs [data-tab="${CSS.escape(tabId)}"]`,
-        `nav.tabs [data-tab-id="${CSS.escape(tabId)}"]`,
-    ].join(", ");
-
-    const control = root.querySelector(selector);
-    return control instanceof HTMLElement ? control : null;
-}
-
-function getTabId(control)
-{
-    return control.dataset.tabId || control.dataset.tab || "";
-}
-
-function getPanelTabId(panel)
-{
-    if (!(panel instanceof HTMLElement)) return "";
-
-    return panel.dataset.tab
-        || panel.dataset.tabId
-        || panel.dataset.tabContentsFor
-        || "";
-}
-
-function getTabControlFromTarget(target)
-{
-    const control = target.closest("[role='tab'], [data-tab], [data-tab-id]");
-    if (!control) return null;
-    if (!control.closest("nav.tabs[data-group], [role='tablist']")) return null;
-    return control;
-}
-
-function getTabLabel(control)
-{
-    return control.getAttribute("aria-label")
-        || control.getAttribute("title")
-        || control.textContent?.trim()
-        || getTabId(control);
-}
-
-function getSheetFocusContainer(root)
-{
-    return root.querySelector(".window-content, .sheet-body, .main-content") || root;
-}
-
-function isRenderedElement(element)
-{
-    if (!(element instanceof HTMLElement)) return false;
-    if (element.hidden) return false;
-    if (element.matches("[disabled], [inert], [tabindex='-1']")) return false;
-    if (element.closest("[hidden], [inert], .hidden")) return false;
-
-    const style = getComputedStyle(element);
-    if (style.display === "none" || style.visibility === "hidden" || style.visibility === "collapse") return false;
-    if (element.getClientRects().length === 0 && style.position !== "fixed") return false;
-
-    return true;
-}
-
-function isFocusableElement(element)
-{
-    return isRenderedElement(element);
-}
-
-function getFocusableElements(root)
-{
-    const selector = [
-        "a[href]",
-        "button",
-        "input",
-        "select",
-        "textarea",
-        "[tabindex]:not([tabindex='-1'])",
-        "[contenteditable='true']",
-        "[role='button']",
-        "[role='tab']",
-    ].join(", ");
-
-    return [...root.querySelectorAll(selector)].filter(isFocusableElement);
-}
-
 function getFocusableLikeElements(root)
 {
     const selector = [
@@ -689,31 +582,6 @@ function getCurrentPanelKeyboardTarget(targets, activeElement)
     return targets.find(target => target === activeElement || target.contains(activeElement)) ?? null;
 }
 
-function getFocusedSheetPanel(root, activeElement)
-{
-    if (!(root instanceof HTMLElement)) return null;
-    if (!(activeElement instanceof HTMLElement)) return null;
-
-    const focusedPanel = activeElement.closest(".tab[data-tab], [role='tabpanel']");
-    if (focusedPanel instanceof HTMLElement && root.contains(focusedPanel)) return focusedPanel;
-
-    const activeTab = getActiveTabControl(root);
-    const activePanel = activeTab ? findTabPanel(root, activeTab) : null;
-    if (activePanel instanceof HTMLElement) return activePanel;
-
-    return null;
-}
-
-function getInitialSheetFocusTarget(root, reverse = false)
-{
-    const activeTab = getActiveTabControl(root);
-    if (activeTab) return activeTab;
-
-    const focusables = getFocusableElements(root);
-    if (!focusables.length) return getSheetFocusContainer(root);
-    return reverse ? focusables.at(-1) : focusables[0];
-}
-
 function isTextEntryElement(element)
 {
     if (!(element instanceof HTMLElement)) return false;
@@ -782,12 +650,13 @@ function getInventoryPrimaryAction(element)
 function isLikelyInventoryMenuTrigger(element)
 {
     if (!(element instanceof HTMLElement)) return false;
-    if (!element.matches(".tidy-table-button, .button-icon-only, .with-options")) return false;
+    if (!element.matches(".tidy-table-button, .button-icon-only, .with-options, [data-context-menu], .item-control")) return false;
 
     const icon = element.querySelector(".fa-ellipsis-vertical, .fa-ellipsis, .fa-bars");
     const text = element.textContent?.trim();
 
     return element.getAttribute("aria-haspopup") === "true"
+        || element.hasAttribute("data-context-menu")
         || !!icon
         || text === "..."
         || text === "⋮";
@@ -1927,9 +1796,34 @@ function getVisibleMenuContainer(root)
     return containers.at(-1) ?? null;
 }
 
-function getVisibleMenuTargets(root)
+function getMenuContainerForTrigger(trigger, root)
 {
-    const container = getVisibleMenuContainer(root);
+    if (!(trigger instanceof HTMLElement)) return getVisibleMenuContainer(root);
+
+    const controlsId = trigger.getAttribute("aria-controls");
+    if (controlsId)
+    {
+        const controlled = document.getElementById(controlsId);
+        if (isVisibleMenuContainer(controlled)) return controlled;
+    }
+
+    const describedById = trigger.getAttribute("aria-describedby");
+    if (describedById)
+    {
+        const described = document.getElementById(describedById);
+        if (isVisibleMenuContainer(described)) return described;
+    }
+
+    const row = getInventoryRowElement(trigger);
+    const localMenu = row?.querySelector?.("menu, [role='menu'], .context-menu, .dropdown-menu, .item-context-menu, .controls-dropdown");
+    if (isVisibleMenuContainer(localMenu)) return localMenu;
+
+    return getVisibleMenuContainer(root);
+}
+
+function getVisibleMenuTargets(root, containerOverride = null)
+{
+    const container = containerOverride instanceof HTMLElement ? containerOverride : getVisibleMenuContainer(root);
     if (!container) return [];
 
     const contextItems = [...container.querySelectorAll(".context-item, [role='menuitem']")]
@@ -1959,10 +1853,10 @@ function getVisibleMenuTargets(root)
         });
 }
 
-function focusFirstVisibleMenuTarget(root)
+function focusFirstVisibleMenuTarget(root, containerOverride = null)
 {
-    const container = getVisibleMenuContainer(root);
-    const targets = getVisibleMenuTargets(root);
+    const container = containerOverride instanceof HTMLElement ? containerOverride : getVisibleMenuContainer(root);
+    const targets = getVisibleMenuTargets(root, container);
     const firstTarget = targets[0];
     if (!firstTarget)
     {
@@ -1984,6 +1878,19 @@ function focusFirstVisibleMenuTarget(root)
     return true;
 }
 
+function focusFirstVisibleMenuTargetWithRetry(root, trigger = null, tries = 8)
+{
+    const attemptFocus = () =>
+    {
+        const container = getMenuContainerForTrigger(trigger, root);
+        if (focusFirstVisibleMenuTarget(root, container)) return;
+        if (tries-- <= 0) return;
+        window.setTimeout(attemptFocus, 25);
+    };
+
+    attemptFocus();
+}
+
 function isKeyboardActivatableElement(element)
 {
     if (!(element instanceof HTMLElement)) return false;
@@ -1994,11 +1901,6 @@ function isKeyboardActivatableElement(element)
     return element.matches(
         "button, [role='button'], [role='menuitem'], a[data-action], .button, .dialog-button, .form-footer button, .form-footer a, .roll-action, .context-item"
     );
-}
-
-function getActiveTabControl(root)
-{
-    return root.querySelector("[role='tab'].active, [role='tab'][aria-selected='true']");
 }
 
 function setActiveActorSheet(app, root)
@@ -2116,20 +2018,6 @@ globalThis.AESheetTabsDebug.dumpSheetMarkup = function dumpSheetMarkup(tabId)
     if (!app || !root) return null;
     return debugSheetMarkup(root, app, tabId) ?? null;
 };
-
-function findTabPanel(root, control)
-{
-    const tabId = getTabId(control);
-    if (!tabId) return null;
-
-    const escapedId = CSS.escape(tabId);
-    const candidates = [
-        ...root.querySelectorAll(`[data-tab-contents-for="${escapedId}"]`),
-        ...root.querySelectorAll(`.tab[data-tab="${escapedId}"]`),
-    ];
-
-    return candidates.find(panel => !panel.closest("nav.tabs, [role='tablist']")) ?? null;
-}
 
 function syncTabAccessibility(root, app)
 {
@@ -2456,11 +2344,11 @@ function attachSheetTabHandlers(root, app)
             {
                 requestAnimationFrame(() =>
                 {
-                    const focusedMenu = focusFirstVisibleMenuTarget(root);
+                    focusFirstVisibleMenuTargetWithRetry(root, target);
                     debugSheetTabs("inventory menu trigger activated", {
                         appId: app?.id,
                         targetClasses: target.className,
-                        focusedMenu,
+                        focusedMenu: true,
                     });
                 });
             });
