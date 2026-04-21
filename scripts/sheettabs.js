@@ -262,12 +262,39 @@ const AE_BASE_PANEL_TARGET_SELECTORS = [
     'select',
     'textarea',
 ];
+
+Hooks.on("init", () =>
+{
+    game.keybindings.register(AE_MODULE_ID, "focusCharacterSheetTabs", {
+        name: "Focus Character Sheet Tabs",
+        hint: "Moves focus back to the active tab button on the current character sheet. Default: Alt+T. You can change this in Configure Controls.",
+        editable: [{ key: "KeyT", modifiers: ["Alt"] }],
+        onDown: () =>
+        {
+            focusActiveActorSheetTabFromHotkey(false);
+            return true;
+        },
+    });
+});
+
 const AE_SHEET_ADAPTERS = [
     {
         id: "tidy5e-classic",
         matches: (app, root) => root?.dataset?.sheetModule === "tidy5e-sheet" && root.classList.contains("classic"),
-        useWholePanelForTargets: true,
+        useWholePanelForTargets: false,
+        localTabReturnHotkey: false,
+        preferRootClassTabIdForHotkey: false,
+        resolveTargetRoot: (panel) =>
+        {
+            if (panel?.dataset?.tabContentsFor === "attributes") return panel;
+            return null;
+        },
         contentRootSelectors: [
+            '[data-tidy-sheet-part="abilities"]',
+            '[data-tidy-sheet-part="ability-scores"]',
+            '[data-tidy-sheet-part="saving-throws"]',
+            '[data-tidy-sheet-part="inventory"]',
+            '[data-tidy-sheet-part="spellbook"]',
             '[data-tidy-sheet-part="item-table"]',
             '[data-tidy-sheet-part="item-table-row"]',
             '[data-tidy-sheet-part="skills-list"]',
@@ -276,8 +303,14 @@ const AE_SHEET_ADAPTERS = [
             '[data-tidy-sheet-part="items-container"]',
             '.skills-list-container',
             '.skills.card',
+            '.abilities.card',
+            '.saves.card',
         ],
         entrySelectors: [
+            '[data-tidy-sheet-part="skill-roller"]',
+            '.use-ability-roll-button',
+            '[data-tidy-sheet-part="ability-save-roller"]',
+            '.ability-save-roller',
             '.item-name',
             '.quantity-tracker-input',
             '.command.decrementer',
@@ -286,8 +319,6 @@ const AE_SHEET_ADAPTERS = [
             '.tidy-table-row-use-button',
             '.tidy-table-button',
             '.tidy5e-skill-name',
-            '.use-ability-roll-button',
-            '.ability-save-roller',
             '.tool-roller',
             '.tool-check-roller',
             '.ability-mod',
@@ -296,6 +327,10 @@ const AE_SHEET_ADAPTERS = [
             '.item-name[role="button"]',
         ],
         panelTargetSelectors: [
+            '[data-tidy-sheet-part="skill-roller"]',
+            '.use-ability-roll-button',
+            '[data-tidy-sheet-part="ability-save-roller"]',
+            '.ability-save-roller',
             '.item-name',
             '.quantity-tracker-input',
             '.command.decrementer',
@@ -304,8 +339,6 @@ const AE_SHEET_ADAPTERS = [
             '.tidy-table-row-use-button',
             '.tidy-table-button',
             '.tidy5e-skill-name',
-            '.use-ability-roll-button',
-            '.ability-save-roller',
             '.tool-roller',
             '.tool-check-roller',
             '.ability-mod',
@@ -317,8 +350,8 @@ const AE_SHEET_ADAPTERS = [
         ],
         excludedPanelTargetSelectors: [
             '.skill-expand-button',
+            '.skill-ability',
             '.button-icon-only.proficiency',
-            '[data-tidy-sheet-part="skill-container"]',
             '.action-bar button',
             '.sort-menu-option',
             '.clear-all-filters',
@@ -330,8 +363,20 @@ const AE_SHEET_ADAPTERS = [
     {
         id: "tidy5e-default",
         matches: (app, root) => root?.dataset?.sheetModule === "tidy5e-sheet",
-        useWholePanelForTargets: true,
+        useWholePanelForTargets: false,
+        localTabReturnHotkey: false,
+        preferRootClassTabIdForHotkey: false,
+        resolveTargetRoot: (panel) =>
+        {
+            if (panel?.dataset?.tabContentsFor === "attributes") return panel;
+            return null;
+        },
         contentRootSelectors: [
+            '[data-tidy-sheet-part="abilities"]',
+            '[data-tidy-sheet-part="ability-scores"]',
+            '[data-tidy-sheet-part="saving-throws"]',
+            '[data-tidy-sheet-part="inventory"]',
+            '[data-tidy-sheet-part="spellbook"]',
             '[data-tidy-sheet-part="item-table"]',
             '[data-tidy-sheet-part="item-table-row"]',
             '[data-tidy-sheet-part="skills-list"]',
@@ -340,8 +385,14 @@ const AE_SHEET_ADAPTERS = [
             '[data-tidy-sheet-part="items-container"]',
             '.skills-list-container',
             '.skills.card',
+            '.abilities.card',
+            '.saves.card',
         ],
         entrySelectors: [
+            '[data-tidy-sheet-part="skill-roller"]',
+            '.use-ability-roll-button',
+            '[data-tidy-sheet-part="ability-save-roller"]',
+            '.ability-save-roller',
             '.item-name',
             '.quantity-tracker-input',
             '.command.decrementer',
@@ -350,8 +401,6 @@ const AE_SHEET_ADAPTERS = [
             '.tidy-table-row-use-button',
             '.tidy-table-button',
             '.tidy5e-skill-name',
-            '.use-ability-roll-button',
-            '.ability-save-roller',
             '.tool-roller',
             '.tool-check-roller',
             '.ability-mod',
@@ -360,6 +409,10 @@ const AE_SHEET_ADAPTERS = [
             '.item-name[role="button"]',
         ],
         panelTargetSelectors: [
+            '[data-tidy-sheet-part="skill-roller"]',
+            '.use-ability-roll-button',
+            '[data-tidy-sheet-part="ability-save-roller"]',
+            '.ability-save-roller',
             '.item-name',
             '.quantity-tracker-input',
             '.command.decrementer',
@@ -368,8 +421,6 @@ const AE_SHEET_ADAPTERS = [
             '.tidy-table-row-use-button',
             '.tidy-table-button',
             '.tidy5e-skill-name',
-            '.use-ability-roll-button',
-            '.ability-save-roller',
             '.tool-roller',
             '.tool-check-roller',
             '.ability-mod',
@@ -381,8 +432,8 @@ const AE_SHEET_ADAPTERS = [
         ],
         excludedPanelTargetSelectors: [
             '.skill-expand-button',
+            '.skill-ability',
             '.button-icon-only.proficiency',
-            '[data-tidy-sheet-part="skill-container"]',
             '.action-bar button',
             '.sort-menu-option',
             '.clear-all-filters',
@@ -395,6 +446,8 @@ const AE_SHEET_ADAPTERS = [
         id: "dnd5e-default",
         matches: (app, root) => app?.document?.documentName === "Actor",
         useWholePanelForTargets: true,
+        localTabReturnHotkey: true,
+        preferRootClassTabIdForHotkey: true,
         entrySelectors: [
             'li.item[data-item-id] .item-name.item-action.rollable',
             'li.item[data-item-id] .activity-name.item-name.item-action.rollable',
@@ -508,12 +561,43 @@ function announceSheetTabsHint(app)
     if (typeof polite !== "function") return;
 
     AE_SHEET_HINTS_ANNOUNCED.add(appId);
-    polite("Character sheet tabs. Tab moves between tabs. Press Enter to open a tab. Control Tab returns to tabs. Escape leaves the sheet.");
+    polite("Character sheet tabs. Tab moves between tabs. Press Enter to open a tab. Alt T returns to tabs. Escape leaves the sheet.");
 
     debugSheetTabs("announced sheet tabs hint", {
         appId,
         title: app?.title,
     });
+}
+
+function focusActiveActorSheetTabFromHotkey(shiftKey = false)
+{
+    const { app, root } = getActiveActorSheetState();
+    if (!app || !root) return false;
+
+    const adapter = getSheetAdapter(app, root);
+    const rootClassTabId = adapter.preferRootClassTabIdForHotkey ? getRootActiveTabId(root) : "";
+    const focusedPanel = getFocusedSheetPanel(root, document.activeElement);
+    const focusedPanelTabId = focusedPanel?.dataset?.tab ?? "";
+    const activeTab = resolveSheetTabReturnControl(root, adapter, shiftKey, {
+        rootClassTabId,
+        focusedPanelTabId,
+    });
+    if (!(activeTab instanceof HTMLElement)) return false;
+
+    setActiveActorSheet(app, root);
+    activeTab.focus({ preventScroll: false });
+    announceSheetTabsHint(app);
+
+    debugSheetTabs("sheet tabs hotkey restored focus to active tab", {
+        appId: app?.id,
+        adapter: adapter.id,
+        shiftKey,
+        rootClassTabId,
+        focusedPanelTabId,
+        tabId: getTabId(activeTab),
+        tabClasses: activeTab?.className,
+    });
+    return true;
 }
 
 function isActorSheetApplication(app, root)
@@ -545,6 +629,48 @@ function getSiblingTabControls(control)
     const tabList = control.closest("nav.tabs[data-group], [role='tablist']");
     if (!tabList) return [];
     return getTabControls(tabList).filter(candidate => getTabId(candidate) && isFocusableElement(candidate));
+}
+
+function getRootActiveTabId(root)
+{
+    if (!(root instanceof HTMLElement)) return "";
+
+    for (const className of root.classList)
+    {
+        if (!className.startsWith("tab-")) continue;
+        const tabId = className.slice(4);
+        if (tabId) return tabId;
+    }
+
+    return "";
+}
+
+function resolveSheetTabReturnControl(root, adapter, shiftKey = false, {
+    rootClassTabId = "",
+    focusedPanelTabId = "",
+} = {})
+{
+    if (!(root instanceof HTMLElement)) return null;
+
+    return getTabControlById(root, rootClassTabId)
+        ?? getTabControlById(root, focusedPanelTabId)
+        ?? getActiveTabControl(root)
+        ?? getInitialSheetFocusTarget(root, shiftKey);
+}
+
+function getTabControlById(root, tabId)
+{
+    if (!(root instanceof HTMLElement) || !tabId) return null;
+
+    const selector = [
+        `[role='tab'][data-tab="${CSS.escape(tabId)}"]`,
+        `[role='tab'][data-tab-id="${CSS.escape(tabId)}"]`,
+        `nav.tabs [data-tab="${CSS.escape(tabId)}"]`,
+        `nav.tabs [data-tab-id="${CSS.escape(tabId)}"]`,
+    ].join(", ");
+
+    const control = root.querySelector(selector);
+    return control instanceof HTMLElement ? control : null;
 }
 
 function getTabId(control)
@@ -635,6 +761,12 @@ function getFocusableLikeElements(root)
 
 function getPanelTargetRoot(panel, adapter)
 {
+    if (typeof adapter.resolveTargetRoot === "function")
+    {
+        const resolvedRoot = adapter.resolveTargetRoot(panel);
+        if (resolvedRoot instanceof HTMLElement) return resolvedRoot;
+    }
+
     if (adapter.useWholePanelForTargets) return panel;
 
     for (const selector of adapter.contentRootSelectors ?? [])
@@ -2314,6 +2446,15 @@ function attachSheetTabHandlers(root, app)
         const control = getTabControlFromTarget(event.target);
         const activeTab = getActiveTabControl(root);
         const activeElement = document.activeElement;
+        const adapter = getSheetAdapter(app, root);
+
+        if (adapter.localTabReturnHotkey && event.altKey && !event.ctrlKey && !event.metaKey && event.key.toLowerCase() === "t")
+        {
+            event.preventDefault();
+            event.stopPropagation();
+            focusActiveActorSheetTabFromHotkey(false);
+            return;
+        }
 
         if (event.ctrlKey && event.key === "Tab")
         {

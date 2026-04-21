@@ -156,6 +156,28 @@ Hooks.on("init", () =>
         },
     });
 
+    game.keybindings.register('accessibility-enhancements', 'openConfigureControls', {
+        name: 'Open Configure Controls',
+        hint: 'Opens Foundry Configure Controls. Default: Alt+Shift+K. In binding capture fields, use Alt+Backspace to cancel. You can change this in Configure Controls.',
+        editable: [{ key: 'KeyK', modifiers: ['Alt', 'Shift'] }],
+        onDown: () =>
+        {
+            void openConfigureControls();
+            return true;
+        },
+    });
+
+    game.keybindings.register('accessibility-enhancements', 'openMyCharacterSheet', {
+        name: 'Open My Character Sheet',
+        hint: 'Opens your current character sheet using your controlled token first, then your assigned character. Default: Alt+C. You can change this in Configure Controls.',
+        editable: [{ key: 'KeyC', modifiers: ['Alt'] }],
+        onDown: () =>
+        {
+            void openPreferredCharacterSheet();
+            return true;
+        },
+    });
+
 });
 
 // ---------------------------------------------------------------------------
@@ -164,6 +186,62 @@ Hooks.on("init", () =>
 
 Hooks.on("ready", () =>
 {
+    const handleKeybindingsControlsKeyEvent = (event) =>
+    {
+        const root = getKeybindingsConfigRoot();
+        if (!(root instanceof HTMLElement)) return;
+
+        const activeElement = document.activeElement;
+        if (!(activeElement instanceof HTMLElement) || !root.contains(activeElement)) return;
+
+        const inBindingControls = !!activeElement.closest('.form-group[data-action-id] .form-fields, .form-group[data-action-id] li[data-binding-id]');
+        if (!inBindingControls) return;
+
+        if (event.key === "Tab" && event.type === "keydown")
+        {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation?.();
+            focusNearestKeybindingControl(activeElement, { forward: !event.shiftKey });
+            return;
+        }
+
+        const isCancelChord =
+            (event.key === "Escape" && event.altKey)
+            || (event.key === "Backspace" && event.altKey);
+
+        if (isCancelChord)
+        {
+            event.preventDefault();
+            event.stopPropagation();
+            event.stopImmediatePropagation?.();
+
+            if (event.type !== "keydown") return;
+
+            const currentGroup = activeElement.closest('.form-group[data-action-id]');
+            const fallbackControl = currentGroup?.querySelector?.([
+                '.form-fields button:not([disabled])',
+                '.form-fields [tabindex]:not([tabindex="-1"])',
+                '.form-fields input:not([type="hidden"]):not([disabled])',
+            ].join(', '));
+
+            if (isKeybindingCaptureInput(activeElement))
+            {
+                activeElement.value = "";
+                activeElement.dispatchEvent(new Event("input", { bubbles: true }));
+                activeElement.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+
+            activeElement.blur();
+
+            requestAnimationFrame(() =>
+            {
+                if (fallbackControl instanceof HTMLElement) fallbackControl.focus({ preventScroll: false });
+                else focusNearestKeybindingControl(activeElement, { forward: true });
+            });
+        }
+    };
+
     if (!document.getElementById("ae-aria-live-polite"))
     {
         const polite = document.createElement("div");
@@ -187,6 +265,9 @@ Hooks.on("ready", () =>
         assertive.className = "ae-sr-only";
         document.body.appendChild(assertive);
     }
+
+    document.addEventListener("keydown", handleKeybindingsControlsKeyEvent, true);
+    document.addEventListener("keyup", handleKeybindingsControlsKeyEvent, true);
 });
 
 // ---------------------------------------------------------------------------
@@ -253,6 +334,94 @@ function normalizeAnnouncementText(text)
 function getSpeakerName(message)
 {
     return message.speaker?.alias || message.author?.name || game.i18n.localize("Unknown");
+}
+
+function getKeybindingsConfigRoot()
+{
+    return document.querySelector('.keybindings-config, [data-application-class*="KeybindingsConfig"]');
+}
+
+function isKeybindingCaptureInput(element)
+{
+    return element instanceof HTMLInputElement
+        && element.type === "text"
+        && /\.binding\.\d+$/.test(element.name ?? "");
+}
+
+function getKeybindingControls(root = getKeybindingsConfigRoot())
+{
+    if (!(root instanceof HTMLElement)) return [];
+
+    const selectors = [
+        '.form-group[data-action-id] .form-fields button:not([disabled])',
+        '.form-group[data-action-id] .form-fields input:not([type="hidden"]):not([disabled])',
+        '.form-group[data-action-id] .form-fields [tabindex]:not([tabindex="-1"])',
+        '.form-group[data-action-id] li[data-binding-id] button:not([disabled])',
+        '.form-group[data-action-id] li[data-binding-id] input:not([type="hidden"]):not([disabled])',
+        '.form-group[data-action-id] li[data-binding-id] [tabindex]:not([tabindex="-1"])',
+    ];
+
+    return [...root.querySelectorAll(selectors.join(', '))]
+        .filter((element) =>
+            element instanceof HTMLElement
+            && !element.hidden
+            && !element.closest('[hidden], [inert], .hidden')
+            && getComputedStyle(element).display !== 'none'
+            && getComputedStyle(element).visibility !== 'hidden'
+            && getComputedStyle(element).visibility !== 'collapse'
+        );
+}
+
+function focusNearestKeybindingControl(fromElement, { forward = true } = {})
+{
+    const controls = getKeybindingControls();
+    if (!controls.length) return false;
+
+    const currentIndex = controls.findIndex((control) => control === fromElement);
+    const fallbackIndex = forward ? 0 : controls.length - 1;
+    const nextIndex = currentIndex === -1
+        ? fallbackIndex
+        : (currentIndex + (forward ? 1 : -1) + controls.length) % controls.length;
+
+    const target = controls[nextIndex];
+    if (!(target instanceof HTMLElement)) return false;
+
+    target.focus({ preventScroll: false });
+    return true;
+}
+
+function getPreferredCharacterActor()
+{
+    const controlledActor = canvas?.tokens?.controlled?.[0]?.actor;
+    if (controlledActor?.isOwner) return controlledActor;
+
+    if (game.user?.character?.isOwner) return game.user.character;
+
+    const ownedSceneTokens = canvas?.tokens?.placeables?.filter((token) => token.actor?.isOwner) ?? [];
+    if (ownedSceneTokens.length === 1) return ownedSceneTokens[0].actor;
+
+    return null;
+}
+
+async function openPreferredCharacterSheet()
+{
+    const actor = getPreferredCharacterActor();
+    if (!actor)
+    {
+        announceAssertive("No owned character sheet is available to open.");
+        return;
+    }
+
+    await actor.sheet.render(true, { focus: true });
+
+    const root = actor.sheet?.element instanceof HTMLElement
+        ? actor.sheet.element
+        : actor.sheet?.element?.[0] instanceof HTMLElement
+            ? actor.sheet.element[0]
+            : null;
+
+    root?.focus?.({ preventScroll: false });
+    announcePolite(`Opened character sheet for ${actor.name}.`);
 }
 
 function isOwnedActor(actor)
@@ -664,6 +833,57 @@ async function openAccessibilitySettings()
     };
 
     setTimeout(focusModuleTab, 250);
+    return true;
+}
+
+async function openConfigureControls()
+{
+    const KeybindingsConfigClass = foundry?.applications?.settings?.KeybindingsConfig ?? globalThis.KeybindingsConfig;
+
+    if (!KeybindingsConfigClass)
+    {
+        ui.notifications?.warn?.("Could not open Configure Controls.");
+        announceAssertive("Could not open Configure Controls.");
+        return false;
+    }
+
+    const existingApp = Object.values(ui.windows ?? {}).find(app => app instanceof KeybindingsConfigClass);
+    const app = existingApp ?? new KeybindingsConfigClass();
+    app.render(true);
+
+    let tries = 20;
+    const focusControlsWindow = () =>
+    {
+        const root = document.querySelector('.keybindings-config, [data-application-class*="KeybindingsConfig"], .application');
+
+        const firstBindingControl = root?.querySelector?.([
+            '.form-group[data-action-id] .form-fields button:not([disabled])',
+            '.form-group[data-action-id] .form-fields input:not([type="hidden"]):not([disabled])',
+            '.form-group[data-action-id] li[data-binding-id] button:not([disabled])',
+            '.form-group[data-action-id] li[data-binding-id] [tabindex]:not([tabindex="-1"])',
+            '.form-group[data-action-id] button:not([disabled])',
+            '.form-group[data-action-id] [tabindex]:not([tabindex="-1"])',
+        ].join(', '));
+        if (firstBindingControl instanceof HTMLElement)
+        {
+            firstBindingControl.focus({ preventScroll: false });
+            announceAssertive("Configure Controls opened.");
+            return;
+        }
+
+        const searchInput = root?.querySelector?.('.window-content input[type="search"], input[type="search"]');
+        if (searchInput instanceof HTMLElement)
+        {
+            searchInput.focus({ preventScroll: false });
+            announceAssertive("Configure Controls opened.");
+            return;
+        }
+
+        if (--tries > 0) setTimeout(focusControlsWindow, 100);
+        else announceAssertive("Configure Controls opened.");
+    };
+
+    setTimeout(focusControlsWindow, 250);
     return true;
 }
 
