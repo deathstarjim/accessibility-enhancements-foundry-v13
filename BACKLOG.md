@@ -78,3 +78,9 @@ All features should be `scope: 'client'` (per-player opt-in) unless noted.
 - [x] Rewrite `labeler.js` — `data-tooltip` support, alt text for images, icon-only button labels
 - [x] Add `screenreader.js` — ARIA live regions, chat/combat/notification announcements
 - [x] Add `.ae-sr-only` CSS utility and `:focus-visible` keyboard focus indicators
+- [x] Add keyboard navigation support for default D&D 5e actor sheets, including tab-strip recovery and in-panel control cycling
+- [x] Add keyboard navigation support for Tidy 5e Sheets (modern/default layout), including Character, Inventory, and Spells tab traversal
+- [x] Add keyboard-first combat/item flows for default D&D 5e sheets: target picker, attack roll, hit/miss handling, damage/healing roll follow-up, and focus return to the originating sheet row
+- [x] Add GM-mediated roll application for player-owned attack/healing flows against unowned targets
+- [x] Add `Alt+C` shortcut to open the current player's character sheet without requiring canvas/token mouse interaction
+- [x] Add `Configure Controls` shortcut and keyboard focus improvements for control remapping dialogs

@@ -5,13 +5,20 @@ New features:
 - Added keyboard navigation support for Tidy 5e Sheets in Foundry v13, including the default modern sheet layout.
 - Added support for tab-strip navigation with `Tab` / `Shift+Tab` and tab activation with `Enter`.
 - Added keyboard entry into active tab content and keyboard cycling through interactive controls inside the active panel.
-- Added shortcuts to recover or leave sheet focus: `Ctrl+Tab` returns focus to the active sheet tab, while `Escape` and `Ctrl+Shift+Tab` release sheet focus.
+- Added shortcuts to recover or leave sheet focus: `Alt+T` returns focus to the active sheet tab, while `Escape` and `Ctrl+Shift+Tab` release sheet focus.
 - Added spoken screen reader guidance when keyboard focus enters a character sheet.
 - Added keyboard activation for common row actions on Tidy 5e inventory and spell rows, including use/roll buttons, item and spell action buttons, and roll configuration dialogs.
 - Added keyboard support for Tidy 5e item context menus so menu items can receive focus and be activated without the mouse.
+- Added keyboard-first target selection for default D&D 5e attack and consumable flows, including distance-aware target ordering and self-first consumable targeting.
+- Added keyboard handling for D&D 5e attack roll, damage roll, and healing roll dialogs with `Normal`-first focus behavior.
+- Added hit/miss follow-up dialogs and direct damage/healing application flows that no longer require navigating chat cards.
+- Added GM-mediated damage/healing application for player-owned attack flows against unowned enemy tokens.
+- Added focus restoration back to the originating inventory/weapon row after attack and consumable flows complete.
 - Added automatic screen reader roll-result announcements and an `Alt+R` shortcut to re-read the latest roll result from chat.
 - Added `Enter` / `Shift+Enter` canvas token actions so the current keyboard token can open its actor sheet or be targeted without the mouse.
 - Added an `Alt+Shift+A` shortcut to open Configure Settings directly to Accessibility Enhancements and move focus into the first setting control for keyboard-only configuration.
+- Added an `Alt+Shift+K` shortcut to open Configure Controls directly and move focus into the keybinding controls for keyboard-only remapping.
+- Added an `Alt+C` shortcut to open the current player's character sheet without first finding a token on the canvas.
 
 ### v0.3.1
 
