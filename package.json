@@ -1,0 +1,19 @@
+{
+  "name": "accessibility-enhancements",
+  "version": "1.0.0",
+  "description": "> **Based on the original [Accessibility Enhancements](https://github.com/silvative/accessibility-enhancements) module by [Cora (silvative)](https://github.com/silvative). This fork adapts the module for D&D 5e (dnd5e2) on Foundry VTT v13.**",
+  "main": "playwright.config.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
+}
