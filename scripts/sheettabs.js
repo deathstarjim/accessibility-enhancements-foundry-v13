@@ -1,4 +1,5 @@
 import { buildSheetAdapters } from "./sheettabs/adapters.js";
+import { registerSheetTabBootstrap } from "./sheettabs/bootstrap.js";
 import {
     clearUserTargets,
     getActivityTargetCandidates,
@@ -58,6 +59,19 @@ import {
     isRenderedElement,
     resolveSheetTabReturnControl,
 } from "./sheettabs/tab-helpers.js";
+import {
+    AE_MODULE_SOCKET,
+    AE_SHEET_HINTS_ANNOUNCED,
+    AE_SHEET_TABS_STATE,
+    AE_SOCKET_ACTIONS,
+    AE_SOCKET_REQUESTS,
+    debugSheetTabs,
+    getActiveActorSheetState as getStoredActiveActorSheetState,
+    getElementDebugSummary,
+    registerSheetTabDebugHelpers as registerStoredSheetTabDebugHelpers,
+    releaseSheetKeyboardCapture as releaseStoredSheetKeyboardCapture,
+    setActiveActorSheet as setStoredActiveActorSheet,
+} from "./sheettabs/state.js";
 
 function getAccessibilitySheetRoot(html)
 {
@@ -288,62 +302,7 @@ function handleModuleSocketMessage(payload)
     }
 }
 
-const AE_SHEET_TABS_STATE = {
-    activeApp: null,
-    activeRoot: null,
-    pendingAttack: null,
-    pendingRollApplication: null,
-    pendingConsumableApplication: null,
-    lastAttackControl: null,
-    lastAttackControlDescriptor: null,
-};
-const AE_MODULE_ID = "accessibility-enhancements";
-const AE_MODULE_SOCKET = `module.${AE_MODULE_ID}`;
-const AE_SOCKET_ACTIONS = {
-    APPLY_ROLL_RESULT: "applyRollResult",
-    APPLY_ROLL_RESULT_RESPONSE: "applyRollResultResponse",
-};
-const AE_SHEET_TABS_DEBUG = true;
-const AE_SHEET_HINTS_ANNOUNCED = new Set();
-const AE_SOCKET_REQUESTS = new Map();
-
-Hooks.on("init", () =>
-{
-    game.keybindings.register(AE_MODULE_ID, "focusCharacterSheetTabs", {
-        name: "Focus Character Sheet Tabs",
-        hint: "Moves focus back to the active tab button on the current character sheet. Default: Alt+T. You can change this in Configure Controls.",
-        editable: [{ key: "KeyT", modifiers: ["Alt"] }],
-        onDown: () =>
-        {
-            focusActiveActorSheetTabFromHotkey(false);
-            return true;
-        },
-    });
-});
-
 const AE_SHEET_ADAPTERS = buildSheetAdapters();
-
-function debugSheetTabs(message, details)
-{
-    if (!AE_SHEET_TABS_DEBUG) return;
-    if (details === undefined) console.log(`[AE SheetTabs] ${message}`);
-    else console.log(`[AE SheetTabs] ${message}`, details);
-}
-
-function getElementDebugSummary(element)
-{
-    if (!(element instanceof HTMLElement)) return null;
-
-    return {
-        tag: element.tagName,
-        classes: element.className,
-        tabIndex: element.tabIndex,
-        role: element.getAttribute("role"),
-        dataTab: element.dataset?.tab,
-        dataAction: element.dataset?.action,
-        text: element.textContent?.trim()?.replace(/\s+/g, " ")?.slice(0, 80) ?? "",
-    };
-}
 
 function getSheetAdapter(app, root)
 {
@@ -451,7 +410,6 @@ function isActorSheetApplication(app, root)
 
 function debugSheetMarkup(root, app, requestedTabId = null)
 {
-    if (!AE_SHEET_TABS_DEBUG) return;
     if (!(root instanceof HTMLElement)) return;
 
     const activeTab = getActiveTabControl(root);
@@ -1104,119 +1062,27 @@ function isKeyboardActivatableElement(element)
 
 function setActiveActorSheet(app, root)
 {
-    AE_SHEET_TABS_STATE.activeApp = app;
-    AE_SHEET_TABS_STATE.activeRoot = root;
-
-    debugSheetTabs("setActiveActorSheet", {
-        appId: app?.id,
-        constructorName: app?.constructor?.name,
-        documentName: app?.document?.documentName,
-        title: app?.title,
-        rootTag: root?.tagName,
-        rootClasses: root?.className,
-    });
-}
-
-function clearActiveActorSheet(reason)
-{
-    debugSheetTabs("clearActiveActorSheet", {
-        reason,
-        storedAppId: AE_SHEET_TABS_STATE.activeApp?.id,
-        storedTitle: AE_SHEET_TABS_STATE.activeApp?.title,
-    });
-
-    AE_SHEET_TABS_STATE.activeApp = null;
-    AE_SHEET_TABS_STATE.activeRoot = null;
-}
-
-function tryGetActorSheetWindow(app)
-{
-    if (!app) return { app: null, root: null };
-
-    const root = getApplicationElement(app, app?.element);
-    if (!root) return { app: null, root: null };
-    if (!isActorSheetApplication(app, root)) return { app: null, root: null };
-
-    return { app, root };
+    return setStoredActiveActorSheet(app, root);
 }
 
 function releaseSheetKeyboardCapture(root, reason)
 {
-    const activeElement = document.activeElement;
-    clearActiveActorSheet(reason);
-
-    if (activeElement instanceof HTMLElement) activeElement.blur();
-    if (root instanceof HTMLElement) root.blur?.();
-    document.body?.focus?.();
-
-    debugSheetTabs("releaseSheetKeyboardCapture", {
-        reason,
-        activeElementTag: activeElement?.tagName,
-        activeElementClasses: activeElement?.className,
-    });
+    return releaseStoredSheetKeyboardCapture(root, reason);
 }
 
 function getActiveActorSheetState()
 {
-    const root = AE_SHEET_TABS_STATE.activeRoot;
-    if (!root?.isConnected)
-    {
-        debugSheetTabs("getActiveActorSheetState bail: root missing or disconnected", {
-            storedAppId: AE_SHEET_TABS_STATE.activeApp?.id,
-        });
-        return tryGetActorSheetWindow(ui?.activeWindow);
-    }
-    if (!root.matches(".window-app, .application, .actor"))
-    {
-        debugSheetTabs("getActiveActorSheetState bail: root shape mismatch", {
-            storedAppId: AE_SHEET_TABS_STATE.activeApp?.id,
-            rootTag: root?.tagName,
-            rootClasses: root?.className,
-        });
-        return tryGetActorSheetWindow(ui?.activeWindow);
-    }
-
-    const activeWindow = ui?.activeWindow;
-    if (activeWindow && activeWindow !== AE_SHEET_TABS_STATE.activeApp)
-    {
-        const activeWindowRoot = getApplicationElement(activeWindow, activeWindow?.element);
-        if (activeWindowRoot && activeWindowRoot !== root && !root.contains(activeWindowRoot))
-        {
-            debugSheetTabs("getActiveActorSheetState bail: ui.activeWindow mismatch", {
-                storedAppId: AE_SHEET_TABS_STATE.activeApp?.id,
-                activeWindowId: activeWindow?.id,
-                activeWindowConstructor: activeWindow?.constructor?.name,
-                activeWindowTitle: activeWindow?.title,
-            });
-            return tryGetActorSheetWindow(activeWindow);
-        }
-    }
-
-    debugSheetTabs("getActiveActorSheetState success", {
-        storedAppId: AE_SHEET_TABS_STATE.activeApp?.id,
-        activeWindowId: activeWindow?.id,
-        activeWindowConstructor: activeWindow?.constructor?.name,
+    return getStoredActiveActorSheetState({
+        getApplicationElement,
+        isActorSheetApplication,
     });
-
-    return {
-        app: AE_SHEET_TABS_STATE.activeApp,
-        root,
-    };
 }
 
-globalThis.AESheetTabsDebug ??= {};
-globalThis.AESheetTabsDebug.dumpActiveSheetMarkup = function dumpActiveSheetMarkup()
-{
-    const { app, root } = getActiveActorSheetState();
-    if (!app || !root) return null;
-    return debugSheetMarkup(root, app) ?? null;
-};
-globalThis.AESheetTabsDebug.dumpSheetMarkup = function dumpSheetMarkup(tabId)
-{
-    const { app, root } = getActiveActorSheetState();
-    if (!app || !root) return null;
-    return debugSheetMarkup(root, app, tabId) ?? null;
-};
+registerStoredSheetTabDebugHelpers({
+    debugSheetMarkup,
+    getApplicationElement,
+    isActorSheetApplication,
+});
 
 function syncTabAccessibility(root, app)
 {
@@ -1849,67 +1715,6 @@ window.addEventListener("keydown", event =>
     target.focus({ preventScroll: false });
 }, true);
 
-Hooks.once("ready", () =>
-{
-    game.socket?.on(AE_MODULE_SOCKET, handleModuleSocketMessage);
-    debugSheetTabs("registered module socket listener", {
-        socket: AE_MODULE_SOCKET,
-        userId: game.user?.id,
-        isGM: game.user?.isGM,
-        hasSocket: !!game.socket,
-    });
-});
-
-Hooks.on("renderApplicationV2", (app, html) =>
-{
-    enhanceActorSheetTabs(app, html);
-});
-
-Hooks.on("closeApplicationV2", app =>
-{
-    debugSheetTabs("closeApplicationV2 received", {
-        appId: app?.id,
-        constructorName: app?.constructor?.name,
-        documentName: app?.document?.documentName,
-        actorDocumentName: app?.actor?.documentName,
-        title: app?.title,
-    });
-
-    if (app !== AE_SHEET_TABS_STATE.activeApp) return;
-
-    clearActiveActorSheet("closeApplicationV2");
-    AE_SHEET_HINTS_ANNOUNCED.delete(app?.id);
-});
-
-Hooks.on("dnd5e.postRollAttack", (rolls, data = {}) =>
-{
-    const pending = AE_SHEET_TABS_STATE.pendingAttack;
-    if (!pending?.targetToken) return;
-    if (pending.activity && data.subject && pending.activity !== data.subject) return;
-
-    const roll = Array.isArray(rolls) ? rolls[0] : null;
-    const rollTotal = getRollTotalValue(roll);
-    const ac = getTargetArmorClass(pending.targetToken);
-    const hit = Number.isFinite(rollTotal) && Number.isFinite(ac) ? rollTotal >= ac : false;
-
-    debugSheetTabs("evaluated attack result", {
-        itemName: pending.itemName,
-        targetName: pending.targetToken.name,
-        rollTotal,
-        armorClass: ac,
-        hit,
-    });
-
-    openAttackResultDialog({
-        activity: data.subject ?? pending.activity,
-        targetToken: pending.targetToken,
-        hit,
-        rollTotal,
-    });
-
-    AE_SHEET_TABS_STATE.pendingAttack = null;
-});
-
 async function handleRollDamageHook(rolls, data = {}, hookName = "dnd5e.rollDamage")
 {
     const pending = AE_SHEET_TABS_STATE.pendingRollApplication;
@@ -2013,5 +1818,12 @@ async function handleRollDamageHook(rolls, data = {}, hookName = "dnd5e.rollDama
     }
 }
 
-Hooks.on("dnd5e.rollDamage", (rolls, data = {}) => void handleRollDamageHook(rolls, data, "dnd5e.rollDamage"));
-Hooks.on("dnd5e.rollDamageV2", (rolls, data = {}) => void handleRollDamageHook(rolls, data, "dnd5e.rollDamageV2"));
+registerSheetTabBootstrap({
+    focusActiveActorSheetTabFromHotkey,
+    enhanceActorSheetTabs,
+    handleModuleSocketMessage,
+    getRollTotalValue,
+    getTargetArmorClass,
+    openAttackResultDialog,
+    handleRollDamageHook,
+});

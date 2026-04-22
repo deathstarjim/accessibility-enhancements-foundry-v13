@@ -1,3 +1,13 @@
+### v0.5.1
+
+- Improved release packaging for GitHub/Forge installs by fixing the release workflow and module archive contents.
+- Updated the module manifest to use release-hosted install URLs instead of development branch URLs.
+- Added Playwright smoke tests covering `Alt+T` tab-return behavior on the current character sheet.
+- Added Playwright smoke coverage for `Alt+T` after switching an actor between Tidy 5e and the default D&D 5e sheet.
+- Added VS Code debug launch entries for the Playwright smoke tests.
+- Refactored the D&D 5e sheet keyboard navigation code by splitting `scripts/sheettabs.js` into smaller modules for state/bootstrap and helper concerns.
+- Improved the reliability of the sheet-switching smoke test by targeting the visible sheet controls menu.
+
 ### v0.5.0
 
 New features:

@@ -119,11 +119,14 @@ async function setCharacterSheetClass(page, actorName, sheetClass)
 {
     const sheet = await openCharacterSheet(page, actorName);
 
-    const toggleControlsButton = sheet.getByRole("button", { name: /^Toggle Controls$/i });
+    const toggleControlsButton = sheet.locator('[data-action="toggleControls"]');
     await expect(toggleControlsButton).toBeVisible();
-    await toggleControlsButton.click();
+    await toggleControlsButton.click({ force: true });
 
-    const configureSheetControl = page.getByText(/^Configure Sheet$/i).last();
+    const visibleControlsDropdown = sheet.locator(".controls-dropdown:visible");
+    await expect(visibleControlsDropdown).toBeVisible();
+
+    const configureSheetControl = visibleControlsDropdown.locator('[data-action="configureSheet"] button');
     await expect(configureSheetControl).toBeVisible();
     await configureSheetControl.click();
 
